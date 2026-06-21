@@ -1,0 +1,11 @@
+{
+  "name": "PROCONTRACTOR",
+  "description": "A GPS-stamped time tracking app for construction employees to clock in/out, track hours, and generate pay reports.",
+  "requestFramePermissions": [
+    "geolocation",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
