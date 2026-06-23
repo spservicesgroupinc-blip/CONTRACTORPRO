@@ -222,7 +222,8 @@ function doPost(e) {
            if (r[0]) {
              companyInfo[r[0]] = r[1];
            }
-       }
+        });
+      }
       
       return ContentService.createTextOutput(JSON.stringify({ success: true, data: { users, entries, invoices, projects, customers, companyInfo } })).setMimeType(ContentService.MimeType.JSON);
     }

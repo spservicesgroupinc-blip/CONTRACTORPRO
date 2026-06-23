@@ -155,7 +155,7 @@ export const Messaging: React.FC<MessagingProps> = ({ profile }) => {
       <div className="px-4 py-3 bg-white border-b border-gray-200 shadow-sm z-20 shrink-0 flex flex-col gap-3" id="chat_header">
         <div className="flex items-center gap-3">
           <div className="flex-1 min-w-0">
-            <h2 className="text-base font-semibold text-gray-800 truncate" id="chat_title">Team Dispatch & Support</h2>
+            <h2 className="text-base font-semibold text-gray-800 truncate" id="chat_title">Team Chat</h2>
             <p className="text-[11px] text-gray-500 font-medium">Auto-synced with company Google Sheet database</p>
           </div>
         </div>
@@ -200,8 +200,8 @@ export const Messaging: React.FC<MessagingProps> = ({ profile }) => {
             <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-3">
               <MessageSquare className="w-6 h-6 text-blue-500" />
             </div>
-            <h3 className="text-sm font-semibold text-gray-800">No dispatch conversations yet</h3>
-            <p className="text-xs text-gray-500 mt-1 max-w-[240px] mx-auto">Vocalize worksite events, ask for dispatch updates, or chat with the supervisor.</p>
+            <h3 className="text-sm font-semibold text-gray-800">No messages yet</h3>
+            <p className="text-xs text-gray-500 mt-1 max-w-[240px] mx-auto">Discuss worksite events or chat with the team.</p>
           </div>
         ) : (
           messages.map((msg, i) => {
@@ -288,7 +288,7 @@ export const Messaging: React.FC<MessagingProps> = ({ profile }) => {
             
             <div className="flex-1 overflow-y-auto p-5 text-sm text-gray-700 leading-relaxed space-y-3 prose prose-sm scrollbar-hide">
               <div className="bg-blue-50/50 rounded-xl p-3 text-xs text-blue-800 font-semibold mb-2">
-                This dynamic intelligence compiles decisions and physical events discussed in team dispatch logs.
+                This dynamic intelligence compiles decisions and physical events discussed in the team chat.
               </div>
               <div className="whitespace-pre-line text-xs font-medium bg-gray-50 border border-gray-100 rounded-2xl p-4">
                 {summary}
@@ -314,7 +314,7 @@ export const Messaging: React.FC<MessagingProps> = ({ profile }) => {
             <Sparkles className="w-3.5 h-3.5" />
           </div>
           <div className="flex-1 min-w-0">
-            <span className="text-[10px] font-extrabold text-purple-700 uppercase tracking-wider block">AI Dispatch Proposed Assistant Reply</span>
+            <span className="text-[10px] font-extrabold text-purple-700 uppercase tracking-wider block">AI Proposed Assistant Reply</span>
             <p className="text-xs text-purple-950 font-medium select-text mt-0.5 italic leading-relaxed">"{aiDraft}"</p>
             <div className="flex items-center gap-2.5 mt-2.5">
               <button 
@@ -350,7 +350,7 @@ export const Messaging: React.FC<MessagingProps> = ({ profile }) => {
             type="text"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder="Type a message to team dispatch..."
+            placeholder="Type a message to the team..."
             className="w-full pl-4 pr-12 py-3 bg-gray-100 border-0 rounded-full focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors text-sm text-gray-800"
             id="chat_input_field"
           />
