@@ -10,7 +10,7 @@ import Messaging from './components/Messaging';
 import BottomNav from './components/BottomNav';
 import Sidebar from './components/Sidebar';
 import { chatService } from './services/chatService';
-import { Clock, FileText, DollarSign, LayoutGrid, User, CalendarDays, Square, Trash2, Plus, CheckCircle2, Wallet, LogOut, ShieldAlert, MessageSquare, Mic, MicOff, Sparkles, Loader2, Briefcase, Tag, AlertCircle, X, Check, StopCircle } from 'lucide-react';
+import { Clock, FileText, DollarSign, LayoutGrid, User, CalendarDays, Square, Trash2, Plus, CheckCircle2, Wallet, LogOut, ShieldAlert, MessageSquare, Mic, MicOff, Sparkles, Loader2, Briefcase, Tag, AlertCircle, X, Check, StopCircle, ChevronRight } from 'lucide-react';
 
 const App: React.FC = () => {
     const [profile, setProfile] = useState<UserProfile | null>(() => {
@@ -275,6 +275,27 @@ const App: React.FC = () => {
         setRecordingState('idle');
         setManualInput('');
         setSelectedTaskProjectFilter(selectedReviewProject);
+        setCurrentTab('tasks');
+    };
+
+    const handleSaveManualTask = () => {
+        const text = manualInput.trim();
+        if (!text) return;
+
+        const newTask: Task = {
+            id: 'task_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+            projectId: selectedReviewProject || 'General',
+            title: text,
+            completed: false,
+            priority: 'medium',
+            category: 'General',
+            createdAt: new Date().toISOString()
+        };
+
+        setTasks(prev => [...prev, newTask]);
+        setManualInput('');
+        setIsAiRecorderOpen(false);
+        setSelectedTaskProjectFilter(selectedReviewProject || 'General');
         setCurrentTab('tasks');
     };
 
@@ -573,18 +594,73 @@ const App: React.FC = () => {
         }
     };
 
-    const handleAddProject = (e: React.FormEvent) => {
+    const handleAddProject = async (e: React.FormEvent) => {
         e.preventDefault();
         const trimmed = newProjectName.trim();
-        if (trimmed && !projects.includes(trimmed)) {
-            setProjects([...projects, trimmed]);
-            setNewProjectName('');
+        if (!trimmed) return;
+        if (projects.includes(trimmed)) {
+            alert('Project / Job Site already exists.');
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            const res = await fetch('/api/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    payload: {
+                        action: 'ADD_PROJECT',
+                        payload: { name: trimmed }
+                    }
+                })
+            });
+            const data = await res.json();
+            if (data && data.success) {
+                setProjects([...projects, trimmed]);
+                setNewProjectName('');
+            } else {
+                alert(data?.error || 'Failed to sync project to Google Sheets.');
+            }
+        } catch (err: any) {
+            console.error('Error adding project:', err);
+            alert('Network error when syncing project to Google Sheets.');
+        } finally {
+            setIsLoading(false);
         }
     };
 
-    const handleDeleteProject = (proj: string) => {
+    const handleDeleteProject = async (proj: string) => {
+        if (proj === 'General') {
+            alert('The "General" project cannot be deleted.');
+            return;
+        }
+
         if (window.confirm(`Delete project "${proj}"? Past time entries will keep this name.`)) {
-            setProjects(projects.filter(p => p !== proj));
+            setIsLoading(true);
+            try {
+                const res = await fetch('/api/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        payload: {
+                            action: 'DELETE_PROJECT',
+                            payload: { name: proj }
+                        }
+                    })
+                });
+                const data = await res.json();
+                if (data && data.success) {
+                    setProjects(projects.filter(p => p !== proj));
+                } else {
+                    alert('Failed to delete project from Google Sheets.');
+                }
+            } catch (err: any) {
+                console.error('Error deleting project:', err);
+                alert('Network error when deleting project from Google Sheets.');
+            } finally {
+                setIsLoading(false);
+            }
         }
     };
 
@@ -603,6 +679,7 @@ const App: React.FC = () => {
                 setIsOpen={setIsSidebarOpen} 
                 currentTab={currentTab} 
                 setCurrentTab={setCurrentTab} 
+                onLogout={handleLogout}
             />
             <div className="w-full max-w-md mx-auto relative flex flex-col h-full overflow-hidden">
                 
@@ -624,7 +701,7 @@ const App: React.FC = () => {
                             <span className="text-sm">📱</span>
                             <span>
                                 {isInstallable ? (
-                                    "Save GeoTime to your home screen for quick offline access!"
+                                    "Save ProContractor to your home screen for quick offline access!"
                                 ) : (
                                     /iPad|iPhone|iPod/.test(navigator.userAgent) ? (
                                         "iOS user? Tap the Share button & choose 'Add to Home Screen'!"
@@ -1071,79 +1148,61 @@ const App: React.FC = () => {
                 {isSlideUpOpen && (
                     <div 
                         onClick={() => setIsSlideUpOpen(false)} 
-                        className="absolute inset-0 bg-gray-900/50 backdrop-blur-[1.5px] transition-opacity z-45"
+                        className="absolute inset-0 bg-slate-900/40 backdrop-blur-[1px] transition-opacity z-45"
                     />
                 )}
 
                 {/* SLIDE-UP DRAWER ACTIONS */}
                 <div 
-                    className={`absolute bottom-0 left-0 right-0 bg-white rounded-t-[28px] shadow-[0_-12px_30px_rgba(0,0,0,0.12)] border-t border-gray-100 transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] z-50 px-5 pt-4 pb-8 transform-gpu will-change-transform ${isSlideUpOpen ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'}`}
+                    className={`absolute bottom-0 left-0 right-0 bg-white border-t border-slate-100 shadow-[0_-8px_30px_rgba(0,0,0,0.08)] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] z-50 px-6 pt-4 pb-8 transform-gpu ${isSlideUpOpen ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'}`}
+                    style={{ borderRadius: '24px 24px 0 0' }}
                 >
-                    <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-3.5" />
+                    <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-5" />
                     
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-sm font-black text-gray-800 tracking-tight">Jobsite Menu & Actions</h3>
+                    <div className="flex justify-between items-center mb-6">
+                        <div>
+                            <h3 className="text-base font-bold text-slate-900 tracking-tight">Jobsite Menu & Actions</h3>
+                            <p className="text-xs text-slate-500 mt-0.5">Quick access to logs, tasks, and project sites</p>
+                        </div>
                         <button 
                             onClick={() => setIsSlideUpOpen(false)}
-                            className="w-6 h-6 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center text-xs font-black transition-all"
+                            className="w-8 h-8 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center transition-all cursor-pointer"
                         >
-                            ✕
+                            <X className="w-4 h-4" />
                         </button>
                     </div>
 
-                    {/* Navigation Dashboard Section */}
-                    <div className="mb-5 bg-gray-50 p-3 rounded-2xl border border-gray-100">
-                        <h4 className="text-[9px] font-black tracking-widest text-gray-500 uppercase mb-2">My Jobsite Hub</h4>
-                        <div className="grid grid-cols-3 gap-2">
-                            <button 
-                                onClick={() => {
-                                    setCurrentTab('tasks');
-                                    setIsSlideUpOpen(false);
-                                }}
-                                className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all text-center ${
-                                    currentTab === 'tasks' 
-                                        ? 'bg-blue-100 shadow-sm border-blue-200 text-[#2563eb] font-black' 
-                                        : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-600 font-extrabold'
-                                }`}
-                            >
-                                <LayoutGrid className="w-5 h-5 mb-1 text-inherit shrink-0" />
-                                <span className="text-[10px] leading-tight">Tasks</span>
-                            </button>
-
-                            <button 
-                                onClick={() => {
-                                    setCurrentTab('paylog');
-                                    setIsSlideUpOpen(false);
-                                }}
-                                className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all text-center ${
-                                    currentTab === 'paylog' 
-                                        ? 'bg-blue-100 shadow-sm border-blue-200 text-[#2563eb] font-black' 
-                                        : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-600 font-extrabold'
-                                }`}
-                            >
-                                <Wallet className="w-5 h-5 mb-1 text-inherit shrink-0" />
-                                <span className="text-[10px] leading-tight">Pay Log</span>
-                            </button>
-
-                            <button 
-                                onClick={() => {
-                                    setCurrentTab('profile');
-                                    setIsSlideUpOpen(false);
-                                }}
-                                className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all text-center ${
-                                    currentTab === 'profile' 
-                                        ? 'bg-blue-100 shadow-sm border-blue-200 text-[#2563eb] font-black' 
-                                        : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-600 font-extrabold'
-                                }`}
-                            >
-                                <User className="w-5 h-5 mb-1 text-inherit shrink-0" />
-                                <span className="text-[10px] leading-tight">Profile</span>
-                            </button>
-                        </div>
+                    {/* Quick Section Tabs */}
+                    <div className="grid grid-cols-3 gap-3 mb-6">
+                        {[
+                            { id: 'tasks', name: 'Checklists', icon: LayoutGrid },
+                            { id: 'paylog', name: 'Time Card', icon: Wallet },
+                            { id: 'profile', name: 'My Profile', icon: User }
+                        ].map((tabObj) => {
+                            const TabIcon = tabObj.icon;
+                            const isActive = currentTab === tabObj.id;
+                            return (
+                                <button
+                                    key={tabObj.id}
+                                    onClick={() => {
+                                        setCurrentTab(tabObj.id as any);
+                                        setIsSlideUpOpen(false);
+                                    }}
+                                    className={`flex flex-col items-center justify-center py-3.5 px-3 rounded-xl border text-center transition-all cursor-pointer ${
+                                        isActive 
+                                            ? 'bg-blue-50/50 border-blue-200 text-blue-600 font-semibold shadow-sm' 
+                                            : 'bg-slate-50/50 hover:bg-slate-50 border-slate-100 text-slate-600 font-medium'
+                                    }`}
+                                >
+                                    <TabIcon className={`w-5 h-5 mb-1.5 ${isActive ? 'text-blue-600' : 'text-slate-500'}`} />
+                                    <span className="text-xs leading-none">{tabObj.name}</span>
+                                </button>
+                            );
+                        })}
                     </div>
 
-                    {/* Creator Actions Section */}
-                    <div className="space-y-2.5">
+                    <div className="border-t border-slate-100 pt-5 space-y-2">
+                        {/* 1. Voice Checklist dictation (The smart voice task button) */}
                         <button 
                             onClick={() => {
                                 setIsSlideUpOpen(false);
@@ -1151,37 +1210,41 @@ const App: React.FC = () => {
                                 setRecordingState('idle');
                                 setRecordingError(null);
                             }}
-                            className="w-full flex items-center gap-3.5 p-3 bg-blue-900 hover:bg-blue-800 text-white rounded-xl text-left transition-all active:scale-98 shadow-sm"
+                            className="w-full flex items-center justify-between p-3.5 hover:bg-slate-50 border border-transparent hover:border-slate-100 rounded-xl text-left transition-all cursor-pointer group"
                         >
-                            <div className="w-8.5 h-8.5 rounded-lg bg-white/20 text-white flex items-center justify-center shadow-inner shrink-0">
-                                <AlertCircle className="w-4 h-4" />
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:bg-blue-100/80 transition-colors">
+                                    <Mic className="w-5 h-5 shrink-0" />
+                                </div>
+                                <div>
+                                    <h4 className="font-semibold text-slate-800 text-sm group-hover:text-blue-600 transition-colors">✨ Voice Task Generator</h4>
+                                    <p className="text-xs text-slate-500 mt-0.5">Dictate tasks/observations and let Gemini draft checklists.</p>
+                                </div>
                             </div>
-                            <div className="min-w-0 flex-1">
-                                <h4 className="font-extrabold text-white text-xs leading-tight">🛡️ Incident Logger</h4>
-                                <p className="text-[10px] text-blue-100 mt-0.5 leading-normal">
-                                    Log structured incidents with AI assistance.
-                                </p>
-                            </div>
+                            <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-650 group-hover:translate-x-0.5 transition-all shrink-0" />
                         </button>
 
+                        {/* 2. Add manual task */}
                         <button 
                             onClick={() => {
                                 setIsSlideUpOpen(false);
                                 setIsNewTaskPopupOpen(true);
                             }}
-                            className="w-full flex items-center gap-3.5 p-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl text-left transition-all active:scale-98"
+                            className="w-full flex items-center justify-between p-3.5 hover:bg-slate-50 border border-transparent hover:border-slate-100 rounded-xl text-left transition-all cursor-pointer group"
                         >
-                            <div className="w-8.5 h-8.5 rounded-lg bg-gray-900 text-white flex items-center justify-center shrink-0">
-                                <Plus className="w-4 h-4" />
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-slate-50 text-slate-600 flex items-center justify-center shrink-0 group-hover:bg-slate-100/80 transition-colors">
+                                    <Plus className="w-5 h-5 shrink-0" />
+                                </div>
+                                <div>
+                                    <h4 className="font-semibold text-slate-800 text-sm group-hover:text-amber-600 transition-colors">Add Standalone Task</h4>
+                                    <p className="text-xs text-slate-500 mt-0.5">Manually add a task or general checklist item.</p>
+                                </div>
                             </div>
-                            <div className="min-w-0 flex-1">
-                                <h4 className="font-extrabold text-gray-800 text-xs leading-tight">✍️ Check-in Quick Task</h4>
-                                <p className="text-[10px] text-gray-500 mt-0.5 leading-normal">
-                                    Manually list a checklist/remediation item.
-                                </p>
-                            </div>
+                            <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-amber-600 group-hover:translate-x-0.5 transition-all shrink-0" />
                         </button>
 
+                        {/* 3. Register current site */}
                         <button 
                             onClick={() => {
                                 setIsSlideUpOpen(false);
@@ -1195,104 +1258,94 @@ const App: React.FC = () => {
                                     }
                                 }
                             }}
-                            className="w-full flex items-center gap-3.5 p-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl text-left transition-all active:scale-98"
+                            className="w-full flex items-center justify-between p-3.5 hover:bg-slate-50 border border-transparent hover:border-slate-100 rounded-xl text-left transition-all cursor-pointer group"
                         >
-                            <div className="w-8.5 h-8.5 rounded-lg bg-gray-200 text-gray-700 flex items-center justify-center shrink-0">
-                                <Briefcase className="w-4 h-4" />
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-slate-50 text-slate-600 flex items-center justify-center shrink-0 group-hover:bg-slate-100/80 transition-colors">
+                                    <Briefcase className="w-5 h-5 shrink-0" />
+                                </div>
+                                <div>
+                                    <h4 className="font-semibold text-slate-800 text-sm group-hover:text-emerald-600 transition-colors">Register New Project Site</h4>
+                                    <p className="text-xs text-slate-500 mt-0.5">Define a new residential address, building, or specific scope.</p>
+                                </div>
                             </div>
-                            <div className="min-w-0 flex-1">
-                                <h4 className="font-extrabold text-gray-750 text-xs leading-tight">💼 Register Job / Project</h4>
-                                <p className="text-[10px] text-gray-500 mt-0.5 leading-normal">
-                                    Specify a new job address or residential address.
-                                </p>
-                            </div>
+                            <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0" />
                         </button>
                     </div>
                 </div>
 
-                {/* INCIDENT LOGGER MODAL PORTAL */}
+                {/* AI VOICE TASK GENERATOR MODAL PORTAL */}
                 {isAiRecorderOpen && (
-                    <div className="absolute inset-x-0 bottom-0 w-full max-w-md mx-auto h-[580px] bg-white rounded-t-[30px] shadow-[0_-15px_40px_rgba(0,0,0,0.15)] border-t border-gray-200 z-50 flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300">
+                    <div className="absolute inset-x-0 bottom-0 w-full max-w-md mx-auto h-[580px] bg-white rounded-t-[30px] shadow-[0_-15px_40px_rgba(0,0,0,0.18)] border-t border-gray-200 z-50 flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300">
                         
-                        <div className="px-5 pt-4 pb-3 border-b border-gray-200 flex justify-between items-center bg-white">
-                            <div className="flex items-center gap-2">
-                                <AlertCircle className="w-5 h-5 text-gray-800" />
-                                <h3 className="text-base font-bold text-gray-900">Incident Logger</h3>
+                        <div className="px-5 py-4 border-b border-gray-200 flex justify-between items-center bg-white shrink-0">
+                            <div className="flex items-center gap-2.5">
+                                <Sparkles className="w-5 h-5 text-blue-600" />
+                                <h3 className="text-base font-bold text-gray-900 tracking-tight">AI Voice Task Generator</h3>
                             </div>
                             <button 
                                 onClick={() => {
                                     cancelRecording();
                                     setIsAiRecorderOpen(false);
                                 }}
-                                className="w-7 h-7 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-900 flex items-center justify-center transition-all"
+                                className="w-7 h-7 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-900 flex items-center justify-center transition-all text-xs font-bold"
                             >
                                 ✕
                             </button>
                         </div>
 
-                        {/* Mode Toggles */}
-                        <div className="px-5 pt-4 pb-2">
-                            <div className="bg-white border border-gray-200 p-1 rounded-lg flex items-center gap-1 mx-auto max-w-xs">
-                                <button className="flex-1 bg-blue-100 text-blue-800 font-medium px-3 py-1.5 rounded-md text-sm transition-colors cursor-pointer">
-                                    AI Interview
-                                </button>
-                                <button className="flex-1 text-gray-500 hover:text-gray-900 px-3 py-1.5 text-sm transition-colors cursor-pointer">
-                                    Manual Form
-                                </button>
-                            </div>
-                        </div>
-
                         {recordingState === 'idle' && (
-                            <div className="flex-1 flex flex-col justify-between px-5 pb-5 overflow-y-auto">
-                                <div className="text-center pt-2">
-                                    <div className="w-16 h-16 rounded-full bg-blue-50 border-4 border-blue-100 flex items-center justify-center mx-auto mb-3.5 hover:scale-105 transition-transform shadow-sm">
-                                        <Mic className="w-7 h-7 text-blue-600" />
+                            <div className="flex-1 flex flex-col justify-between p-5 overflow-y-auto">
+                                <div className="text-center pt-3">
+                                    <div className="w-16 h-16 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center mx-auto mb-4 hover:scale-105 transition-transform shadow-sm">
+                                        <Mic className="w-7 h-7 text-blue-600 animate-pulse" />
                                     </div>
-                                    <h4 className="font-extrabold text-gray-800 text-sm mb-1">Describe Incident Audio</h4>
+                                    <h4 className="font-bold text-gray-800 text-sm mb-1.5">Voice Log Dictation</h4>
                                     <p className="text-xs text-gray-500 leading-relaxed max-w-[280px] mx-auto">
-                                        Speak clearly about the incident. E.g., "Water leak on 3rd floor causing safety hazard and wall damage."
+                                        Speak checklist detail or active tasks: E.g., "Need punch list on kitchen floor tiles, also clean the paint splatters on window trim."
                                     </p>
                                 </div>
 
-                                <div className="space-y-3 pt-4">
+                                <div className="space-y-4 pt-4">
                                     {recordingError && (
-                                        <div className="p-2.5 bg-red-50 text-red-800 rounded-xl border border-red-200 flex gap-2 items-start">
+                                        <div className="p-3 bg-red-50 text-red-800 rounded-xl border border-red-200 flex gap-2.5 items-start">
                                             <AlertCircle className="w-4 h-4 text-red-650 shrink-0 mt-0.5" />
-                                            <p className="text-[10px] leading-normal font-bold">{recordingError}</p>
+                                            <p className="text-[11px] leading-snug font-semibold">{recordingError}</p>
                                         </div>
                                     )}
 
                                     <button 
                                         onClick={startRecording}
-                                        className="w-full bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-semibold text-sm py-3 rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all animate-pulse"
+                                        className="w-full bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-bold text-sm py-3 rounded-lg flex items-center justify-center gap-2 shadow-sm transition-all animate-pulse"
                                     >
-                                        <Mic className="w-4 h-4" /> Start AI Interview
+                                        <Mic className="w-4 h-4 fill-white animate-bounce" /> Start Voice Recording
                                     </button>
 
                                     {/* Typed Fallback section */}
-                                    <div className="border-t border-gray-200 pt-3">
-                                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-                                            Or Type Incident Log
+                                    <div className="border-t border-gray-150 pt-3">
+                                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">
+                                            or paste handwritten tasks / typed list
                                         </label>
                                         <textarea
                                             value={manualInput}
                                             onChange={(e) => setManualInput(e.target.value)}
-                                            placeholder="Example: Broken pipe near the main entrance..."
-                                            className="w-full h-20 p-3 border border-gray-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-400 resize-none bg-gray-50"
+                                            placeholder="Example: Fix the leaking copper joint, repair drywalls in master hall, clean dust off countertops..."
+                                            className="w-full h-24 p-2.5 border border-gray-250 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-gray-400 resize-none bg-gray-50"
                                         />
-                                        <div className="flex gap-2 mt-2 w-full">
+                                        <div className="flex gap-2 mt-2 w-full animate-in fade-in duration-300">
                                             <button 
+                                                onClick={handleSaveManualTask}
                                                 disabled={!manualInput.trim()}
-                                                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold border border-gray-300 px-4 py-2.5 rounded-md disabled:opacity-40 text-sm"
+                                                className="flex-1 bg-white hover:bg-gray-50 text-gray-700 font-bold border border-gray-300 px-3 py-2.5 rounded-lg disabled:opacity-40 text-xs transition-colors"
                                             >
-                                                Save Log
+                                                Save Directly
                                             </button>
                                             <button 
                                                 onClick={processTypedNotes}
                                                 disabled={!manualInput.trim()}
-                                                className="flex-1 bg-blue-900 hover:bg-blue-800 text-white font-semibold px-4 py-2.5 rounded-md flex items-center justify-center gap-2 disabled:opacity-40 text-sm shadow-sm"
+                                                className="flex-1 bg-slate-900 hover:bg-slate-950 text-white font-bold px-3 py-2.5 rounded-lg flex items-center justify-center gap-1.5 disabled:opacity-45 text-xs shadow-sm transition-colors"
                                             >
-                                                <Sparkles className="w-4 h-4 text-purple-300" /> Refine with AI
+                                                <Sparkles className="w-3.5 h-3.5 text-amber-300" /> Auto-Extract with AI
                                             </button>
                                         </div>
                                     </div>

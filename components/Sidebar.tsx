@@ -6,6 +6,7 @@ interface SidebarProps {
   setIsOpen: (isOpen: boolean) => void;
   currentTab: string;
   setCurrentTab: (tab: string) => void;
+  onLogout: () => void;
 }
 
 const NavItem = ({ icon: Icon, label, isActive, disabled, onClick }: any) => {
@@ -34,7 +35,7 @@ const NavItem = ({ icon: Icon, label, isActive, disabled, onClick }: any) => {
   );
 };
 
-const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, currentTab, setCurrentTab }) => {
+const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, currentTab, setCurrentTab, onLogout }) => {
   return (
     <>
       {/* Backdrop for mobile */}
@@ -51,7 +52,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, currentTab, setCur
         }`}
       >
         <div className="p-6">
-          <h2 className="text-xl font-bold text-white tracking-tight">GeoTime<span className="text-blue-400">.Track</span></h2>
+          <h2 className="text-xl font-bold text-white tracking-tight">Pro<span className="text-blue-400">Contractor</span></h2>
         </div>
 
         <nav className="flex-1 px-4 space-y-2 overflow-y-auto">
@@ -88,11 +89,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, currentTab, setCur
         </nav>
 
         <div className="p-4 border-t border-blue-800">
-          <button onClick={() => window.location.reload()} className="w-full flex items-center justify-center gap-2 text-red-300 hover:text-white hover:bg-red-900/30 font-medium pb-2 pt-2 rounded-lg transition-colors">
-            <LogOut className="w-4 h-4" /> Switch Account
+          <button onClick={onLogout} className="w-full flex items-center justify-center gap-2 text-red-350 hover:text-white hover:bg-red-900/30 font-semibold py-2.5 rounded-xl transition-all cursor-pointer">
+            <LogOut className="w-4 h-4" /> Sign Out
           </button>
           <div className="mt-4 text-center">
-            <p className="text-white font-bold tracking-tight">GeoTime Tracker</p>
+            <p className="text-white font-bold tracking-tight">ProContractor</p>
             <p className="text-gray-400 text-xs mt-0.5">Workforce Management</p>
           </div>
         </div>

@@ -1,6 +1,6 @@
 {
-  "name": "GeoTime Tracker",
-  "short_name": "GeoTime",
+  "name": "ProContractor",
+  "short_name": "ProContractor",
   "description": "GPS-stamped time tracking for construction teams, complete with invoicing and payroll reporting.",
   "start_url": "/",
   "display": "standalone",

@@ -1,5 +1,5 @@
 /**
- * GeoTime Tracker - Google Apps Script Backend (Updated)
+ * ProContractor - Google Apps Script Backend (Updated)
  * 
  * Instructions:
  * 1. Create a new Google Spreadsheet (or use an existing one).
@@ -9,7 +9,7 @@
  * 5. Click "Deploy" (top right) -> "New deployment".
  * 6. Under "Select type", click the Gear icon and choose "Web app".
  * 7. Set options:
- *    - Description: "GeoTime Tracker Backend"
+ *    - Description: "ProContractor Backend"
  *    - Execute as: "Me" (your email)
  *    - Who has access: "Anyone" (This is crucial, the proxy server will handle request forwarding).
  * 8. Click "Deploy", approve any permissions requested, and COPY the generated Web App URL.
@@ -71,9 +71,9 @@ function setup() {
     companySheet.appendRow(["Key", "Value"]);
     companySheet.getRange("A1:B1").setFontWeight("bold");
     companySheet.setFrozenRows(1);
-    companySheet.appendRow(["businessName", "GEOTIME CONTRACTING"]);
+    companySheet.appendRow(["businessName", "PROCONTRACTOR"]);
     companySheet.appendRow(["tagline", "PREMIUM TRACKED TIME & FIELD SERVICES INVOICING"]);
-    companySheet.appendRow(["contactLine", "Contact: smartcontracting@geotime.com | Tel: (555) 019-9238"]);
+    companySheet.appendRow(["contactLine", "Contact: billing@procontractor.com | Tel: (555) 019-9238"]);
     companySheet.appendRow(["address", ""]);
   }
 
@@ -212,9 +212,9 @@ function doPost(e) {
       }
 
       let companyInfo = {
-        businessName: 'GEOTIME CONTRACTING',
+        businessName: 'PROCONTRACTOR',
         tagline: 'PREMIUM TRACKED TIME & FIELD SERVICES INVOICING',
-        contactLine: 'Contact: smartcontracting@geotime.com | Tel: (555) 019-9238',
+        contactLine: 'Contact: billing@procontractor.com | Tel: (555) 019-9238',
         address: ''
       };
       if (cInfoData.length > 1) {
@@ -425,9 +425,9 @@ function doGet(e) {
   if (companySheet) {
     const cInfoData = companySheet.getDataRange().getValues();
     companyInfo = {
-        businessName: 'GEOTIME CONTRACTING',
+        businessName: 'PROCONTRACTOR',
         tagline: 'PREMIUM TRACKED TIME & FIELD SERVICES INVOICING',
-        contactLine: 'Contact: smartcontracting@geotime.com | Tel: (555) 019-9238',
+        contactLine: 'Contact: billing@procontractor.com | Tel: (555) 019-9238',
         address: ''
     };
     if (cInfoData.length > 1) {

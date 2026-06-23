@@ -1,6 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, TimeEntry, Invoice, InvoiceItem, Customer } from '../types';
-import { ShieldAlert, Users, Search, ChevronLeft, ArrowRight, Download, DollarSign, Clock, FileText, Plus, Trash2, MessageSquare, Building, Contact } from 'lucide-react';
+import { 
+    ShieldAlert, 
+    Users, 
+    Search, 
+    ChevronLeft, 
+    ArrowRight, 
+    Download, 
+    DollarSign, 
+    Clock, 
+    FileText, 
+    Plus, 
+    Trash2, 
+    MessageSquare, 
+    Building, 
+    Contact, 
+    MapPin, 
+    Sliders, 
+    Calendar, 
+    ChevronRight, 
+    Briefcase,
+    Settings,
+    X,
+    UserCheck,
+    Coins,
+    UserX
+} from 'lucide-react';
 import { generateInvoicePDF } from '../services/pdfService';
 import Messaging from './Messaging';
 import { chatService } from '../services/chatService';
@@ -31,14 +56,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
     const [selectedJob, setSelectedJob] = useState<string | null>(null);
     const [unreadChatCount, setUnreadChatCount] = useState(0);
     
-    // Tabs
-    const [activeTab, setActiveTab] = useState<'live' | 'employees' | 'customers' | 'invoices' | 'jobs' | 'chat' | 'company'>('live');
+    // Hub State ('hub' is the main dashboard launcher, replacing a big clutter of buttons)
+    const [activeTab, setActiveTab] = useState<'hub' | 'live' | 'employees' | 'customers' | 'invoices' | 'jobs' | 'chat' | 'company'>('hub');
 
     // Company Info State
     const [companyInfo, setCompanyInfo] = useState({
-        businessName: 'GEOTIME CONTRACTING',
+        businessName: 'PROCONTRACTOR',
         tagline: 'PREMIUM TRACKED TIME & FIELD SERVICES INVOICING',
-        contactLine: 'Contact: smartcontracting@geotime.com | Tel: (555) 019-9238',
+        contactLine: 'Contact: billing@procontractor.com | Tel: (555) 019-9238',
         address: ''
     });
 
@@ -65,6 +90,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
     const [newCustomerEmail, setNewCustomerEmail] = useState('');
     const [newCustomerPhone, setNewCustomerPhone] = useState('');
     const [newCustomerAddress, setNewCustomerAddress] = useState('');
+    const [autoCreateProject, setAutoCreateProject] = useState(true);
 
     const ADMIN_PIN = '1234';
 
@@ -108,6 +134,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
         if (pin === ADMIN_PIN) {
             setIsAuthenticated(true);
             fetchAdminData();
+            setActiveTab('hub');
         } else {
             setError('Invalid PIN code');
         }
@@ -230,6 +257,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
             if (!data.success) {
                 throw new Error(data.error || 'Failed to add customer');
             }
+
+            // Also create corresponding project if selected
+            if (autoCreateProject) {
+                try {
+                    await fetch('/api/sync', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            payload: {
+                                action: 'ADD_PROJECT',
+                                payload: { name: trimmed }
+                            }
+                        })
+                    });
+                } catch (projErr) {
+                    console.error('Error auto-creating matching project:', projErr);
+                }
+            }
+
             setNewCustomerName('');
             setNewCustomerEmail('');
             setNewCustomerPhone('');
@@ -361,30 +407,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
 
     if (!isAuthenticated) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-[500px] p-5">
-                <div className="w-full max-w-sm bg-white rounded-3xl shadow-sm p-8 border border-gray-100 flex flex-col items-center">
-                    <div className="w-16 h-16 bg-blue-950 rounded-2xl flex items-center justify-center mb-6">
-                        <ShieldAlert className="text-[#2563eb] w-8 h-8" />
+            <div className="w-full max-w-md mx-auto min-h-[100dvh] bg-slate-50 flex flex-col justify-between p-6 shadow-xl relative pb-12">
+                <div className="flex-1 flex flex-col items-center justify-center pt-8">
+                    <div className="w-16 h-16 bg-blue-950 rounded-2xl flex items-center justify-center mb-6 shadow-md border border-white/10">
+                        <ShieldAlert className="text-blue-500 w-8 h-8" />
                     </div>
-                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Admin Access</h2>
-                    <p className="text-sm font-semibold text-gray-500 mb-8 text-center">
-                        Enter your master PIN to access company payroll records.
+                    <h2 className="text-2xl font-bold text-slate-900 mb-1.5 tracking-tight">Admin Console</h2>
+                    <p className="text-xs font-semibold text-slate-500 mb-8 text-center max-w-[260px] leading-relaxed">
+                        Security verification required to unlock executive workforce directory and financials.
                     </p>
-                    <form onSubmit={handleLogin} className="w-full flex flex-col gap-4">
-                        <input 
-                            type="password"
-                            autoFocus
-                            placeholder="PIN Code (Hint: 1234)"
-                            value={pin}
-                            onChange={(e) => setPin(e.target.value)}
-                            className="w-full px-4 py-3 text-center tracking-[0.5em] text-2xl font-bold bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563eb]"
-                        />
-                        {error && <p className="text-sm font-bold text-red-500 text-center">{error}</p>}
-                        <button type="submit" className="w-full bg-blue-950 text-white py-3.5 rounded-xl font-bold shadow-md hover:bg-gray-800 transition-colors mt-2">
-                            Unlock Dashboard
+                    
+                    <form onSubmit={handleLogin} className="w-full flex flex-col gap-4 max-w-xs">
+                        <div className="relative">
+                            <input 
+                                type="password"
+                                autoFocus
+                                placeholder="••••"
+                                value={pin}
+                                onChange={(e) => setPin(e.target.value)}
+                                className="w-full px-4 py-3.5 text-center tracking-[0.6em] text-3xl font-extrabold bg-white border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all shadow-inner placeholder-slate-350"
+                            />
+                        </div>
+                        {error && <p className="text-xs font-semibold text-red-650 text-center animate-pulse">{error}</p>}
+                        
+                        <button type="submit" className="w-full bg-blue-950 text-white py-3.5 rounded-2xl font-bold shadow-md hover:bg-slate-900 active:scale-98 transition-all mt-2 cursor-pointer text-sm">
+                            Unlock Controls
                         </button>
                     </form>
-                    <button onClick={onClose} className="mt-6 text-sm font-bold text-gray-400 hover:text-gray-600">
+                </div>
+                
+                <div className="text-center pt-6 shrink-0">
+                    <button onClick={onClose} className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer transition-colors px-4 py-2 rounded-lg hover:bg-slate-100">
                         Cancel & Return
                     </button>
                 </div>
@@ -414,113 +467,267 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
         totalPay += Math.max(0, durationHr) * wage;
     });
 
+    const activeWorkersCount = adminData?.entries.filter(e => !e.clockOut).length || 0;
+
     return (
-        <div className="flex flex-col bg-gray-50 min-h-[100dvh] pb-20">
-            <header className="bg-blue-950 text-white px-5 pt-12 pb-6 shrink-0 relative z-10 flex border-b-4 border-[#2563eb]">
-                <button onClick={onClose} className="absolute top-12 left-5 w-10 h-10 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors">
-                    <ChevronLeft className="w-5 h-5" />
-                </button>
-                <div className="flex-1 text-center mt-1">
-                    <h1 className="text-xl font-bold tracking-tight">Admin Console</h1>
-                    <p className="text-xs font-bold text-[#2563eb] uppercase mt-0.5 tracking-widest">Master Overview</p>
+        <div className="w-full max-w-md mx-auto min-h-[100dvh] bg-slate-50 flex flex-col relative shadow-xl overflow-y-auto pb-20">
+            {/* 1. Global Admin Header (Clean, consistent layout like normal app) */}
+            <header className="bg-blue-950 text-white px-5 py-4 shrink-0 relative flex items-center justify-between shadow-sm z-30">
+                <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center font-bold text-sm text-white border border-white/15">
+                        A
+                    </div>
+                    <div>
+                        <h1 className="text-sm font-bold tracking-tight">Admin Portal</h1>
+                        <p className="text-[10px] font-bold text-blue-300 uppercase tracking-wider">ProContractor Executive</p>
+                    </div>
                 </div>
+                <button 
+                    onClick={onClose}
+                    className="px-3 py-1.5 bg-white/10 hover:bg-white/20 active:scale-95 text-xs font-bold text-white rounded-lg transition-all cursor-pointer"
+                >
+                    Exit Console
+                </button>
             </header>
 
-            <div className="px-5 mt-4 mb-4 flex flex-wrap gap-2">
-                <button 
-                   className={`flex-1 min-w-[30%] py-2 text-sm font-bold rounded-xl transition-colors ${activeTab === 'live' ? 'bg-blue-950 text-white shadow-md' : 'bg-white text-gray-500 border border-gray-200'}`}
-                   onClick={() => setActiveTab('live')}
-                >
-                   Live
-                </button>
-                <button 
-                   className={`flex-1 min-w-[30%] py-2 text-sm font-bold rounded-xl transition-colors ${activeTab === 'employees' ? 'bg-blue-950 text-white shadow-md' : 'bg-white text-gray-500 border border-gray-200'}`}
-                   onClick={() => setActiveTab('employees')}
-                >
-                   Overview
-                </button>
-                <button 
-                   className={`flex-1 min-w-[30%] py-2 text-sm font-bold rounded-xl transition-colors ${activeTab === 'customers' ? 'bg-blue-950 text-white shadow-md' : 'bg-white text-gray-500 border border-gray-200'}`}
-                   onClick={() => setActiveTab('customers')}
-                >
-                   Customers
-                </button>
-                <button 
-                   className={`flex-1 min-w-[30%] py-2 text-sm font-bold rounded-xl transition-colors ${activeTab === 'jobs' ? 'bg-blue-950 text-white shadow-md' : 'bg-white text-gray-500 border border-gray-200'}`}
-                   onClick={() => setActiveTab('jobs')}
-                >
-                   Jobs
-                </button>
-                <button 
-                   className={`flex-1 min-w-[30%] py-2 text-sm font-bold rounded-xl transition-colors ${activeTab === 'invoices' ? 'bg-blue-950 text-white shadow-md' : 'bg-white text-gray-500 border border-gray-200'}`}
-                   onClick={() => setActiveTab('invoices')}
-                >
-                   Invoices
-                </button>
-                <button 
-                   className={`flex-1 min-w-[30%] py-2 text-sm font-bold rounded-xl transition-colors relative flex items-center justify-center gap-1.5 ${activeTab === 'chat' ? 'bg-blue-950 text-white shadow-md' : 'bg-white text-gray-500 border border-gray-200'}`}
-                   onClick={() => setActiveTab('chat')}
-                >
-                   <MessageSquare className="w-4 h-4" />
-                   Chat
-                   {unreadChatCount > 0 && (
-                       <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white text-[10px] font-black border-2 border-gray-50 shadow-sm">
-                           {unreadChatCount}
-                       </span>
-                   )}
-                </button>
-                <button 
-                   className={`flex-1 min-w-[30%] py-2 text-sm font-bold rounded-xl transition-colors relative flex items-center justify-center gap-1.5 ${activeTab === 'company' ? 'bg-blue-950 text-white shadow-md' : 'bg-white text-gray-500 border border-gray-200'}`}
-                   onClick={() => setActiveTab('company')}
-                >
-                   <Building className="w-4 h-4" />
-                   Company
-                </button>
-            </div>
+            {/* MAIN PORTAL BODY VIEWPORTS */}
+            <div className="flex-1 w-full p-5 flex flex-col">
+                
+                {/* A. HOME HUB VIEWPORT (Replaces the "bunch of buttons" layout with a gorgeous mobile dashboard launcher) */}
+                {activeTab === 'hub' && (
+                    <div className="flex-1 flex flex-col animate-in fade-in transition-all duration-300">
+                        
+                        {/* At-A-Glance Bento Stats Grid */}
+                        <div className="grid grid-cols-3 gap-3 mb-6">
+                            {/* Live Workers Stat */}
+                            <div className="bg-white rounded-2xl border border-slate-100 p-3.5 shadow-sm flex flex-col justify-between min-h-[96px]">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Live Now</span>
+                                    <span className="relative flex h-2.5 w-2.5">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                                    </span>
+                                </div>
+                                <div className="mt-2.5">
+                                    <p className="text-2xl font-extrabold text-slate-800 leading-none">{activeWorkersCount}</p>
+                                    <p className="text-[10px] text-slate-500 font-medium mt-1">Clocked In</p>
+                                </div>
+                            </div>
 
-            <div className="px-5 relative z-20">
-                {activeTab === 'live' && (
-                    <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-5 flex flex-col gap-4">
-                        <div className="flex justify-between items-center pb-4 border-b border-gray-100">
-                            <div className="flex items-center gap-2 text-gray-800">
-                                <span className="relative flex h-3 w-3">
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                                  <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-                                </span>
-                                <span className="font-bold text-sm">Live Employees</span>
+                            {/* Total Hours Stat */}
+                            <div className="bg-white rounded-2xl border border-slate-100 p-3.5 shadow-sm flex flex-col justify-between min-h-[96px]">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Hours</span>
+                                    <Clock className="w-4 h-4 text-blue-500 shrink-0" />
+                                </div>
+                                <div className="mt-2.5">
+                                    <p className="text-2xl font-extrabold text-slate-800 leading-none">{totalHours.toFixed(1)}h</p>
+                                    <p className="text-[10px] text-slate-500 font-medium mt-1">Total Time</p>
+                                </div>
+                            </div>
+
+                            {/* Estimated Payroll Stat */}
+                            <div className="bg-white rounded-2xl border border-slate-100 p-3.5 shadow-sm flex flex-col justify-between min-h-[96px]">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Payroll</span>
+                                    <DollarSign className="w-4 h-4 text-emerald-550 shrink-0" />
+                                </div>
+                                <div className="mt-2.5">
+                                    <p className="text-2xl font-extrabold text-slate-850 leading-none">
+                                        ${totalPay.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                    </p>
+                                    <p className="text-[10px] text-slate-500 font-medium mt-1">Gross Cost</p>
+                                </div>
                             </div>
                         </div>
-                        <div className="flex flex-col gap-3">
+
+                        {/* Navigation Section Header */}
+                        <div className="mb-3 pl-1">
+                            <h3 className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">Management Directories</h3>
+                        </div>
+
+                        {/* Executive Tool Grid (Elegant action hubs with custom icons, titles, and subtext) */}
+                        <div className="space-y-3">
+                            {/* 1. Live Field Tracker */}
+                            <button 
+                                onClick={() => setActiveTab('live')}
+                                className="w-full bg-white hover:bg-slate-50 border border-slate-100 rounded-2xl p-4 text-left transition-all active:scale-98 shadow-sm flex items-center justify-between group cursor-pointer"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:bg-blue-100 transition-colors">
+                                        <MapPin className="w-5.5 h-5.5" />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-bold text-slate-800 text-sm group-hover:text-blue-650 transition-colors">Live Field Tracker</h4>
+                                        <p className="text-xs text-slate-500 mt-0.5">Track maps and positions of currently active workers.</p>
+                                    </div>
+                                </div>
+                                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-650 group-hover:translate-x-0.5 transition-all shrink-0" />
+                            </button>
+
+                            {/* 2. Timesheets & Directory */}
+                            <button 
+                                onClick={() => setActiveTab('employees')}
+                                className="w-full bg-white hover:bg-slate-50 border border-slate-100 rounded-2xl p-4 text-left transition-all active:scale-98 shadow-sm flex items-center justify-between group cursor-pointer"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 group-hover:bg-emerald-100 transition-colors">
+                                        <Users className="w-5.5 h-5.5" />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-bold text-slate-800 text-sm group-hover:text-emerald-650 transition-colors">Workforce & Timesheets</h4>
+                                        <p className="text-xs text-slate-500 mt-0.5">Manage directory, change wages, view logs, and payrolls</p>
+                                    </div>
+                                </div>
+                                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-650 group-hover:translate-x-0.5 transition-all shrink-0" />
+                            </button>
+
+                            {/* 3. Clients / Customers */}
+                            <button 
+                                onClick={() => setActiveTab('customers')}
+                                className="w-full bg-white hover:bg-slate-50 border border-slate-100 rounded-2xl p-4 text-left transition-all active:scale-98 shadow-sm flex items-center justify-between group cursor-pointer"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 group-hover:bg-purple-100 transition-colors">
+                                        <Contact className="w-5.5 h-5.5" />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-bold text-slate-800 text-sm group-hover:text-purple-650 transition-colors">Client Directory</h4>
+                                        <p className="text-xs text-slate-500 mt-0.5">Manage details and coordinates of registered buyers.</p>
+                                    </div>
+                                </div>
+                                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-purple-650 group-hover:translate-x-0.5 transition-all shrink-0" />
+                            </button>
+
+                            {/* 4. Project Sites */}
+                            <button 
+                                onClick={() => setActiveTab('jobs')}
+                                className="w-full bg-white hover:bg-slate-50 border border-slate-100 rounded-xl p-4 text-left transition-all active:scale-98 shadow-sm flex items-center justify-between group cursor-pointer"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 group-hover:bg-amber-100 transition-colors">
+                                        <Briefcase className="w-5.5 h-5.5" />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-bold text-slate-800 text-sm group-hover:text-amber-650 transition-colors">Residential Projects</h4>
+                                        <p className="text-xs text-slate-500 mt-0.5">Setup active buildings, target codes, and field scopes.</p>
+                                    </div>
+                                </div>
+                                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-amber-650 group-hover:translate-x-0.5 transition-all shrink-0" />
+                            </button>
+
+                            {/* 5. Invoicing & Invoices */}
+                            <button 
+                                onClick={() => setActiveTab('invoices')}
+                                className="w-full bg-white hover:bg-slate-50 border border-slate-100 rounded-2xl p-4 text-left transition-all active:scale-98 shadow-sm flex items-center justify-between group cursor-pointer"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <div className="w-11 h-11 rounded-xl bg-cyan-50 text-cyan-600 flex items-center justify-center shrink-0 group-hover:bg-cyan-100 transition-colors">
+                                        <FileText className="w-5.5 h-5.5" />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-bold text-slate-800 text-sm group-hover:text-cyan-650 transition-colors">Billing & Invoices</h4>
+                                        <p className="text-xs text-slate-500 mt-0.5">Draft client PDF timesheets and view invoice archives.</p>
+                                    </div>
+                                </div>
+                                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-cyan-650 group-hover:translate-x-0.5 transition-all shrink-0" />
+                            </button>
+
+                            {/* 6. Direct Messenger */}
+                            <button 
+                                onClick={() => setActiveTab('chat')}
+                                className="w-full bg-white hover:bg-slate-50 border border-slate-100 rounded-2xl p-4 text-left transition-all active:scale-98 shadow-sm flex items-center justify-between group cursor-pointer"
+                            >
+                                <div className="flex items-center gap-4 font-semibold">
+                                    <div className="w-11 h-11 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0 group-hover:bg-sky-100 transition-colors relative">
+                                        <MessageSquare className="w-5.5 h-5.5" />
+                                        {unreadChatCount > 0 && (
+                                            <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-550 border-2 border-white text-white font-extrabold text-[10px] rounded-full flex items-center justify-center">
+                                                {unreadChatCount}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <div className="flex items-center gap-1.5">
+                                            <h4 className="font-bold text-slate-800 text-sm group-hover:text-sky-650 transition-colors">Staff Communications</h4>
+                                        </div>
+                                        <p className="text-xs text-slate-500 mt-0.5">Send direct announcements or request log confirmations.</p>
+                                    </div>
+                                </div>
+                                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-sky-650 group-hover:translate-x-0.5 transition-all shrink-0" />
+                            </button>
+
+                            {/* 7. Company settings */}
+                            <button 
+                                onClick={() => setActiveTab('company')}
+                                className="w-full bg-white hover:bg-slate-50 border border-slate-100 rounded-2xl p-4 text-left transition-all active:scale-98 shadow-sm flex items-center justify-between group cursor-pointer"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <div className="w-11 h-11 rounded-xl bg-slate-100 text-slate-650 flex items-center justify-center shrink-0 group-hover:bg-slate-200 transition-colors">
+                                        <Settings className="w-5.5 h-5.5 animate-spin-slow" />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-bold text-slate-800 text-sm group-hover:text-slate-900 transition-colors">Company Identity</h4>
+                                        <p className="text-xs text-slate-500 mt-0.5">Adjust physical contacts, phone indices, and invoices.</p>
+                                    </div>
+                                </div>
+                                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-900 group-hover:translate-x-0.5 transition-all shrink-0" />
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* B. LIVE employee TRACES VIEWPORT */}
+                {activeTab === 'live' && (
+                    <div className="flex-1 flex flex-col animate-in slide-in-from-right duration-200">
+                        {/* Navigation Sub-Header */}
+                        <div className="flex items-center gap-3 mb-5 pl-1">
+                            <button onClick={() => setActiveTab('hub')} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-all cursor-pointer">
+                                <ChevronLeft className="w-5 h-5" />
+                            </button>
+                            <div>
+                                <h2 className="text-base font-bold text-slate-800 leading-none">Live Employee Tracker</h2>
+                                <p className="text-xs text-slate-500 mt-1">Real-time coordinates of currently active field builders</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm space-y-4">
                             {adminData?.entries.filter(e => !e.clockOut).length === 0 ? (
-                                <p className="text-gray-500 text-sm text-center py-4">No employees currently clocked in.</p>
+                                <div className="py-8 text-center">
+                                    <UserX className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                                    <p className="text-slate-400 text-sm font-semibold">No employees currently clocked in.</p>
+                                </div>
                             ) : (
                                 adminData?.entries.filter(e => !e.clockOut).map(e => {
                                     const user = adminData.users.find(u => u.id === e.profileId);
                                     return (
-                                        <div key={e.id} className="p-3 bg-gray-50 border border-gray-100 rounded-xl flex items-center justify-between">
+                                        <div key={e.id} className="p-4 bg-slate-50 border border-slate-150 rounded-xl flex items-center justify-between hover:border-blue-250 transition-all">
                                             <div>
-                                                <p className="font-bold text-sm text-gray-800">{user?.name || 'Unknown'}</p>
-                                                <p className="text-xs text-gray-500 mt-1">
-                                                    Job: <span className="font-semibold text-gray-700">{e.projectName || 'General'}</span>
+                                                <p className="font-bold text-[14px] text-slate-800">{user?.name || 'Unknown User'}</p>
+                                                <p className="text-xs text-slate-500 mt-1.5 flex items-center gap-1">
+                                                    <Briefcase className="w-3.5 h-3.5 text-slate-400" />
+                                                    Job Site: <span className="font-bold text-slate-700">{e.projectName || 'General'}</span>
                                                 </p>
                                                 {e.clockInLocation && (
-                                                    <p className="text-[10px] text-gray-400 mt-1">
+                                                    <p className="text-[10px] text-slate-400 mt-1.5 font-mono">
                                                         Lat: {e.clockInLocation.latitude.toFixed(4)}, Lng: {e.clockInLocation.longitude.toFixed(4)}
                                                     </p>
                                                 )}
                                             </div>
-                                            <div className="text-right">
-                                                <p className="text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded-md mb-1 inline-block">
-                                                    Clocked in at {new Date(e.clockIn).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                                </p>
-                                                <a 
-                                                    href={`https://www.google.com/maps/search/?api=1&query=${e.clockInLocation?.latitude},${e.clockInLocation?.longitude}`}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="block text-[10px] font-bold text-blue-500 hover:underline"
-                                                >
-                                                    View Map
-                                                </a>
+                                            <div className="text-right flex flex-col items-end">
+                                                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-1 rounded-lg mb-2">
+                                                    In: {new Date(e.clockIn).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                                </span>
+                                                {e.clockInLocation && (
+                                                    <a 
+                                                        href={`https://www.google.com/maps/search/?api=1&query=${e.clockInLocation?.latitude},${e.clockInLocation?.longitude}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline border border-blue-100 bg-blue-50 px-2.5 py-1 rounded-lg hover:bg-blue-100 transition-colors"
+                                                    >
+                                                        <MapPin className="w-3 h-3" /> Pin Map
+                                                    </a>
+                                                )}
                                             </div>
                                         </div>
                                     );
@@ -529,334 +736,460 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                         </div>
                     </div>
                 )}
+
+                {/* C. WORKFORCE / TIMESHEETS VIEWPORT */}
                 {activeTab === 'employees' && (
-                    <>
-                        <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-5 flex flex-col gap-4">
-                    <div className="flex justify-between items-center pb-4 border-b border-gray-100">
-                        <div className="flex items-center gap-2 text-gray-800">
-                            <Users className="w-5 h-5 text-[#2563eb]" />
-                            <span className="font-bold text-sm">Company Directory</span>
-                        </div>
-                        <div className="flex flex-wrap gap-2 justify-end">
-                            <button 
-                                onClick={() => setIsAddingEmployee(!isAddingEmployee)}
-                                className="bg-blue-950 text-white text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-gray-800"
-                            >
-                                {isAddingEmployee ? 'Cancel' : '+ Employee'}
-                            </button>
-                            <select 
-                                value={selectedUser || ''} 
-                                onChange={(e) => setSelectedUser(e.target.value || null)}
-                                className="bg-gray-50 border border-gray-200 text-xs font-bold rounded-lg px-2 py-1.5 focus:outline-none"
-                            >
-                                <option value="">All Employees</option>
-                                {adminData?.users.map(u => (
-                                    <option key={u.id} value={u.id}>{u.name} (${u.hourlyWage}/hr)</option>
-                                ))}
-                            </select>
-                            <select 
-                                value={selectedJob || ''} 
-                                onChange={(e) => setSelectedJob(e.target.value || null)}
-                                className="bg-gray-50 border border-gray-200 text-xs font-bold rounded-lg px-2 py-1.5 focus:outline-none"
-                            >
-                                <option value="">All Jobs</option>
-                                {(adminData?.projects || []).map((proj, idx) => (
-                                    <option key={idx} value={proj}>{proj}</option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-
-                    {isAddingEmployee && (
-                        <form onSubmit={handleAddEmployee} className="flex gap-2 p-3 bg-gray-50 rounded-xl border border-gray-100 pb-3">
-                            <input 
-                                type="text"
-                                placeholder="Employee Name"
-                                value={newEmpName}
-                                onChange={e => setNewEmpName(e.target.value)}
-                                className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2563eb]"
-                            />
-                            <input 
-                                type="number"
-                                placeholder="Wage ($)"
-                                value={newEmpWage}
-                                onChange={e => setNewEmpWage(e.target.value)}
-                                step="0.01"
-                                className="w-24 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2563eb]"
-                            />
-                            <button type="submit" className="bg-[#2563eb] text-white text-sm font-bold px-4 py-2 rounded-lg hover:bg-blue-600">
-                                Save
-                            </button>
-                        </form>
-                    )}
-
-                    <div className="flex gap-4">
-                        <div className="flex-1 bg-gray-50 rounded-xl p-4 flex flex-col items-center justify-center border border-gray-100">
-                            <Clock className="w-6 h-6 text-gray-400 mb-1" />
-                            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-0.5">Total Hours</p>
-                            <p className="text-2xl font-extrabold text-gray-800">{totalHours.toFixed(2)}<span className="text-sm font-bold text-gray-400 ml-1">hrs</span></p>
-                        </div>
-                        <div className="flex-1 bg-emerald-50 rounded-xl p-4 flex flex-col items-center justify-center border border-emerald-100">
-                            <DollarSign className="w-6 h-6 text-emerald-400 mb-1" />
-                            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-0.5">Total Payroll</p>
-                            <p className="text-2xl font-extrabold text-[#10b981]">${totalPay.toFixed(2)}</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="mt-6 flex justify-between items-end mb-4">
-                    <h2 className="text-lg font-bold text-gray-800">Timesheet Logs</h2>
-                    <button className="text-xs font-bold text-[#2563eb] flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-full">
-                        <Download className="w-3.5 h-3.5" />
-                        Export
-                    </button>
-                </div>
-
-                {isLoading ? (
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 flex justify-center items-center">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#101726]"></div>
-                    </div>
-                ) : (
-                    <div className="space-y-3">
-                        {filteredEntries.map((e, idx) => {
-                            const user = adminData?.users.find(u => u.id === e.profileId);
-                            const wage = user ? parseFloat(user.hourlyWage) : 0;
-                            const inTime = new Date(e.clockIn).getTime();
-                            const outTime = e.clockOut ? new Date(e.clockOut).getTime() : Date.now();
-                            const dur = (outTime - inTime) / (1000 * 60 * 60);
-
-                            return (
-                                <div key={idx} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-                                    <div className="flex justify-between items-start mb-2">
-                                        <div>
-                                            <p className="font-bold text-sm text-gray-800">{user ? user.name : 'Unknown User'}</p>
-                                            <p className="text-xs font-semibold text-gray-400 mt-0.5">{new Date(e.clockIn).toDateString()}</p>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="font-extrabold text-[#101726]">{Math.max(0, dur).toFixed(2)}h</p>
-                                            <p className="text-xs font-bold text-[#10b981] mt-0.5">${(Math.max(0, dur) * wage).toFixed(2)}</p>
-                                        </div>
-                                    </div>
-                                    <div className="bg-gray-50 rounded-lg p-2.5 flex items-center gap-3">
-                                        <div className="flex-[1] text-left">
-                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">IN</p>
-                                            <p className="text-xs font-bold text-gray-600">{new Date(e.clockIn).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
-                                        </div>
-                                        <ArrowRight className="w-4 h-4 text-gray-300" />
-                                        <div className="flex-[1] text-right">
-                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">OUT</p>
-                                            <p className="text-xs font-bold text-gray-600">{e.clockOut ? new Date(e.clockOut).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Active'}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                        {filteredEntries.length === 0 && (
-                            <div className="bg-white p-8 rounded-2xl border border-gray-100 flex justify-center text-gray-400 font-bold text-sm">
-                                No entries found.
-                            </div>
-                        )}
-                    </div>
-                )}
-                    </>
-                )}
-
-                {activeTab === 'customers' && (
-                    <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-5 flex flex-col gap-4">
-                        <div className="flex justify-between items-center pb-4 border-b border-gray-100">
-                            <div className="flex items-center gap-2 text-gray-800">
-                                <Contact className="w-5 h-5 text-[#2563eb]" />
-                                <span className="font-bold text-sm">Customer Directory</span>
-                            </div>
-                            <button 
-                                onClick={() => setIsAddingCustomer(!isAddingCustomer)}
-                                className="bg-blue-950 text-white text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-gray-800"
-                            >
-                                {isAddingCustomer ? 'Cancel' : '+ New Customer'}
-                            </button>
-                        </div>
-
-                        {isAddingCustomer && (
-                            <form onSubmit={handleAddCustomer} className="flex flex-col gap-3 p-4 bg-gray-50 rounded-xl border border-gray-100 pb-4">
-                                <input 
-                                    type="text" required placeholder="Customer Name *"
-                                    value={newCustomerName} onChange={e => setNewCustomerName(e.target.value)}
-                                    className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none"
-                                />
-                                <input 
-                                    type="email" placeholder="Email"
-                                    value={newCustomerEmail} onChange={e => setNewCustomerEmail(e.target.value)}
-                                    className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none"
-                                />
-                                <input 
-                                    type="tel" placeholder="Phone"
-                                    value={newCustomerPhone} onChange={e => setNewCustomerPhone(e.target.value)}
-                                    className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none"
-                                />
-                                <input 
-                                    type="text" placeholder="Address"
-                                    value={newCustomerAddress} onChange={e => setNewCustomerAddress(e.target.value)}
-                                    className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none"
-                                />
-                                <button type="submit" className="bg-[#2563eb] text-white text-sm font-bold px-4 py-2 rounded-lg hover:bg-blue-600 self-start">
-                                    Save Customer
+                    <div className="flex-1 flex flex-col animate-in slide-in-from-right duration-200">
+                        {/* Navigation Header */}
+                        <div className="flex items-center gap-3 mb-5 pl-1 justify-between">
+                            <div className="flex items-center gap-3">
+                                <button onClick={() => setActiveTab('hub')} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-all cursor-pointer">
+                                    <ChevronLeft className="w-5 h-5" />
                                 </button>
-                            </form>
-                        )}
+                                <div>
+                                    <h2 className="text-base font-bold text-slate-800 leading-none">Workforce Management</h2>
+                                    <p className="text-xs text-slate-500 mt-1">Rates, timesheets, and payroll reporting logs</p>
+                                </div>
+                            </div>
+                        </div>
 
-                        <div className="space-y-3 mt-2">
+                        {/* Directory Action controls */}
+                        <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm mb-5">
+                            <div className="flex items-center justify-between pb-3.5 border-b border-slate-100 mb-4">
+                                <span className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">Interactive Filters</span>
+                                <button 
+                                    onClick={() => setIsAddingEmployee(!isAddingEmployee)}
+                                    className="bg-blue-950 text-white text-xs font-bold px-3 py-1.5 rounded-xl hover:bg-slate-900 transition-all flex items-center gap-1 cursor-pointer"
+                                >
+                                    {isAddingEmployee ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />} {isAddingEmployee ? 'Cancel' : 'New Employee'}
+                                </button>
+                            </div>
+
+                            {/* Inline Adds employee fields if clicked */}
+                            {isAddingEmployee && (
+                                <form onSubmit={handleAddEmployee} className="p-4 bg-slate-50 border border-slate-150 rounded-2xl gap-3 flex flex-col mb-4 animate-in slide-in-from-top duration-300">
+                                    <h4 className="text-xs font-bold text-slate-700 leading-none mb-1">Add Staff Member</h4>
+                                    <div className="gap-2.5 flex">
+                                        <input 
+                                            type="text" required placeholder="Full Name *"
+                                            value={newEmpName} onChange={e => setNewEmpName(e.target.value)}
+                                            className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        />
+                                        <input 
+                                            type="number" required placeholder="Wage/h ($)"
+                                            value={newEmpWage} onChange={e => setNewEmpWage(e.target.value)}
+                                            step="0.01" className="w-24 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        />
+                                    </div>
+                                    <button type="submit" className="bg-blue-600 text-white text-xs font-bold py-2 px-4 rounded-lg hover:bg-blue-700 self-end shadow-sm">
+                                        Enroll Employee
+                                    </button>
+                                </form>
+                            )}
+
+                            {/* Dropdown Filters */}
+                            <div className="grid grid-cols-2 gap-2">
+                                <div className="flex flex-col">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 ml-1">Staff Member</label>
+                                    <select 
+                                        value={selectedUser || ''} 
+                                        onChange={(e) => setSelectedUser(e.target.value || null)}
+                                        className="bg-slate-50 border border-slate-200 text-xs font-bold rounded-xl px-3 py-2.5 text-slate-700 focus:outline-none cursor-pointer"
+                                    >
+                                        <option value="">All Staff</option>
+                                        {adminData?.users.map(u => (
+                                            <option key={u.id} value={u.id}>{u.name} (${u.hourlyWage}/h)</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="flex flex-col">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 ml-1">Project Code</label>
+                                    <select 
+                                        value={selectedJob || ''} 
+                                        onChange={(e) => setSelectedJob(e.target.value || null)}
+                                        className="bg-slate-50 border border-slate-200 text-xs font-bold rounded-xl px-3 py-2.5 text-slate-700 focus:outline-none cursor-pointer"
+                                    >
+                                        <option value="">All Projects</option>
+                                        {(adminData?.projects || []).map((proj, idx) => (
+                                            <option key={idx} value={proj}>{proj}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Calculated Pay Metrics Box */}
+                        <div className="grid grid-cols-2 gap-4 mb-5">
+                            <div className="bg-white border border-slate-100 p-4 rounded-2xl shadow-sm text-center">
+                                <Clock className="w-5 h-5 text-slate-400 mx-auto mb-1" />
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Duration Accum</p>
+                                <p className="text-lg font-extrabold text-slate-800 mt-1">{totalHours.toFixed(1)} <span className="text-xs text-slate-400 font-bold">hrs</span></p>
+                            </div>
+                            <div className="bg-emerald-50/50 border border-emerald-100/60 p-4 rounded-2xl shadow-sm text-center">
+                                <Coins className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
+                                <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest mt-1">Estimated Cost</p>
+                                <p className="text-lg font-extrabold text-[#10b981] mt-1">${totalPay.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                            </div>
+                        </div>
+
+                        {/* Logs Title block */}
+                        <div className="flex justify-between items-center mb-3 px-1 pl-2">
+                            <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">Timesheet Log Entries ({filteredEntries.length})</span>
+                            <button className="text-[11px] font-bold text-blue-650 flex items-center gap-1.5 bg-blue-50 border border-blue-100 hover:bg-blue-100 px-3 py-1.5 rounded-full transition-colors cursor-pointer">
+                                <Download className="w-3.5 h-3.5" /> Exports CSV
+                            </button>
+                        </div>
+
+                        {/* Timesheet List scroll */}
+                        {isLoading ? (
+                            <div className="bg-white rounded-2xl border border-slate-100 p-10 flex justify-center items-center">
+                                <div className="animate-spin rounded-full h-7 w-7 border-2 border-blue-900 border-t-transparent"></div>
+                            </div>
+                        ) : (
+                            <div className="space-y-2.5">
+                                {filteredEntries.map((e, idx) => {
+                                    const user = adminData?.users.find(u => u.id === e.profileId);
+                                    const wage = user ? parseFloat(user.hourlyWage) : 0;
+                                    const inTime = new Date(e.clockIn).getTime();
+                                    const outTime = e.clockOut ? new Date(e.clockOut).getTime() : Date.now();
+                                    const dur = (outTime - inTime) / (1000 * 60 * 60);
+
+                                    return (
+                                        <div key={idx} className="bg-white rounded-2xl border border-slate-100 p-4 hover:border-slate-200 shadow-sm transition-all">
+                                            <div className="flex justify-between items-start mb-2.5 pb-2.5 border-b border-slate-50">
+                                                <div>
+                                                    <p className="font-bold text-sm text-slate-800">{user ? user.name : 'Unknown Builder'}</p>
+                                                    <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
+                                                        {new Date(e.clockIn).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                                                    </p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="font-extrabold text-slate-800 text-sm leading-tight">{Math.max(0, dur).toFixed(2)}h</p>
+                                                    <p className="text-[11px] font-bold text-emerald-600 mt-1 leading-tight">${(Math.max(0, dur) * wage).toFixed(2)}</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center justify-between gap-3 text-center">
+                                                <div className="flex-1 bg-slate-50 rounded-xl p-2 text-left">
+                                                    <span className="block text-[8px] font-bold text-slate-400 uppercase tracking-widest">In Date/Time</span>
+                                                    <span className="text-xs font-bold text-slate-700 leading-none mt-1 inline-block">
+                                                        {new Date(e.clockIn).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                                    </span>
+                                                </div>
+                                                <ArrowRight className="w-4 h-4 text-slate-300" />
+                                                <div className="flex-1 bg-slate-50 rounded-xl p-2 text-right">
+                                                    <span className="block text-[8px] font-bold text-slate-400 uppercase tracking-widest">Out Date/Time</span>
+                                                    <span className="text-xs font-bold text-slate-700 leading-none mt-1 inline-block">
+                                                        {e.clockOut ? new Date(e.clockOut).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Active'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div className="text-[10px] font-bold text-slate-500 bg-slate-50/50 mt-2 px-2 py-1.5 rounded-lg flex justify-between items-center border border-slate-100">
+                                                <span>Address Scope Code:</span>
+                                                <span className="text-slate-800 font-extrabold">{e.projectName || 'General'}</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                {filteredEntries.length === 0 && (
+                                    <div className="bg-white p-8 rounded-2xl border border-slate-100 text-center shadow-sm">
+                                        <p className="text-slate-400 text-sm font-semibold">No payroll entries logged matching details.</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* D. CUSTOMER DIRECTORY VIEWPORT */}
+                {activeTab === 'customers' && (
+                    <div className="flex-1 flex flex-col animate-in slide-in-from-right duration-200">
+                        {/* Navigation Sub-Header */}
+                        <div className="flex items-center gap-3 mb-5 pl-1 justify-between">
+                            <div className="flex items-center gap-3">
+                                <button onClick={() => setActiveTab('hub')} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-all cursor-pointer">
+                                    <ChevronLeft className="w-5 h-5" />
+                                </button>
+                                <div>
+                                    <h2 className="text-base font-bold text-slate-800 leading-none">Client Contacts</h2>
+                                    <p className="text-xs text-slate-500 mt-1">Manage core customer names, phone, and addresses</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Customer Control panel */}
+                        <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm mb-4">
+                            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3.5">
+                                <span className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">Identity Registrations</span>
+                                <button 
+                                    onClick={() => {
+                                        setIsAddingCustomer(!isAddingCustomer);
+                                        setNewCustomerName('');setNewCustomerEmail('');setNewCustomerPhone('');setNewCustomerAddress('');
+                                    }}
+                                    className="bg-blue-950 text-white text-xs font-bold px-3 py-1.5 rounded-xl hover:bg-slate-900 transition-all flex items-center gap-1 cursor-pointer"
+                                >
+                                    {isAddingCustomer ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />} {isAddingCustomer ? 'Cancel' : 'New Customer'}
+                                </button>
+                            </div>
+
+                            {/* Create customer Form */}
+                            {isAddingCustomer && (
+                                <form onSubmit={handleAddCustomer} className="p-4 bg-slate-50 border border-slate-150 rounded-2xl flex flex-col gap-3 animate-in slide-in-from-top duration-300">
+                                    <h4 className="text-xs font-bold text-slate-700 leading-none mb-1">Enroll New Customer Account</h4>
+                                    <div>
+                                        <label className="block text-[8px] font-bold text-slate-450 uppercase mb-1 ml-1">Customer Account Name *</label>
+                                        <input 
+                                            type="text" required placeholder="E.g., Sp Services Group Inc"
+                                            value={newCustomerName} onChange={e => setNewCustomerName(e.target.value)}
+                                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[8px] font-bold text-slate-450 uppercase mb-1 ml-1">Electronic Mail Address Code</label>
+                                        <input 
+                                            type="email" placeholder="example@billing.com"
+                                            value={newCustomerEmail} onChange={e => setNewCustomerEmail(e.target.value)}
+                                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label className="block text-[8px] font-bold text-slate-450 uppercase mb-1 ml-1">Contact Telephone</label>
+                                            <input 
+                                                type="tel" placeholder="555-019-2182"
+                                                value={newCustomerPhone} onChange={e => setNewCustomerPhone(e.target.value)}
+                                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[8px] font-bold text-slate-450 uppercase mb-1 ml-1">Properties Target Site</label>
+                                            <input 
+                                                type="text" placeholder="104 Maple Ave"
+                                                value={newCustomerAddress} onChange={e => setNewCustomerAddress(e.target.value)}
+                                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-1 px-1">
+                                        <input 
+                                            type="checkbox" 
+                                            id="autoCreateProject" 
+                                            checked={autoCreateProject} 
+                                            onChange={e => setAutoCreateProject(e.target.checked)}
+                                            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 cursor-pointer"
+                                        />
+                                        <label htmlFor="autoCreateProject" className="text-[11px] font-semibold text-slate-600 cursor-pointer">
+                                            Auto-register corresponding Job Site & project
+                                        </label>
+                                    </div>
+                                    <button type="submit" className="bg-blue-600 text-white text-xs font-bold py-2 px-4 rounded-lg hover:bg-blue-700 self-end shadow-sm cursor-pointer mt-1">
+                                        Register Client Account
+                                    </button>
+                                </form>
+                            )}
+                        </div>
+
+                        {/* Customer List cards */}
+                        <div className="space-y-3">
                             {(adminData?.customers || []).length > 0 ? (
                                 (adminData?.customers || []).map((customer, idx) => (
-                                    <div key={idx} className="flex flex-col sm:flex-row justify-between sm:items-center p-4 bg-gray-50 rounded-xl border border-gray-100 hover:border-gray-200 transition-all gap-4">
-                                        <div className="flex items-start gap-3">
-                                            <div className="w-10 h-10 shrink-0 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 font-bold">
+                                    <div key={idx} className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm flex justify-between items-start gap-4">
+                                        <div className="flex gap-3">
+                                            <div className="w-10 h-10 shrink-0 rounded-xl bg-purple-50 text-purple-650 flex items-center justify-center font-bold text-sm border border-purple-100">
                                                 {customer.name.charAt(0).toUpperCase()}
                                             </div>
-                                            <div>
-                                                <span className="font-bold text-gray-800 text-sm block">{customer.name}</span>
-                                                {customer.email && <span className="text-xs text-gray-500 block">{customer.email}</span>}
-                                                {customer.phone && <span className="text-xs text-gray-500 block">{customer.phone}</span>}
-                                                {customer.address && <span className="text-xs text-gray-500 block mt-1">{customer.address}</span>}
+                                            <div className="min-w-0">
+                                                <h3 className="font-bold text-sm text-slate-800 leading-tight truncate">{customer.name}</h3>
+                                                {customer.email && <p className="text-xs text-slate-500 mt-1.5 font-medium flex items-center gap-1 leading-none">{customer.email}</p>}
+                                                {customer.phone && <p className="text-xs text-slate-500 mt-1 font-medium flex items-center gap-1 leading-none">{customer.phone}</p>}
+                                                {customer.address && <p className="text-[11px] font-bold text-slate-600 mt-2 bg-slate-50 px-2 py-1 rounded border border-slate-100 leading-normal inline-block">{customer.address}</p>}
                                             </div>
                                         </div>
                                         <button 
                                             onClick={() => handleDeleteCustomer(customer.id, customer.name)}
-                                            className="shrink-0 sm:self-center self-end w-10 h-10 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors flex items-center justify-center border border-gray-200 bg-white"
+                                            className="w-9 h-9 shrink-0 rounded-xl bg-slate-50 border border-slate-150 hover:bg-red-50 hover:border-red-150 text-slate-400 hover:text-red-650 transition-all flex items-center justify-center cursor-pointer"
                                         >
                                             <Trash2 className="w-4 h-4" />
                                         </button>
                                     </div>
                                 ))
                             ) : (
-                                <div className="py-8 text-center text-gray-400 text-sm font-bold">
-                                    No Customers registered yet.
+                                <div className="bg-white rounded-2xl border border-slate-100 p-8 text-center shadow-sm">
+                                    <p className="text-slate-400 text-sm font-semibold">No customer accounts saved in master registries.</p>
                                 </div>
                             )}
                         </div>
                     </div>
                 )}
 
+                {/* E. RESIDENTIAL PROJECTS / JOBS SITE VIEWPORT */}
                 {activeTab === 'jobs' && (
-                    <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-5 flex flex-col gap-4">
-                        <div className="flex justify-between items-center pb-4 border-b border-gray-100">
-                            <div className="flex items-center gap-2 text-gray-800">
-                                <Users className="w-5 h-5 text-[#2563eb]" />
-                                <span className="font-bold text-sm">Customer Jobs / Projects</span>
+                    <div className="flex-1 flex flex-col animate-in slide-in-from-right duration-200">
+                        {/* Navigation Header */}
+                        <div className="flex items-center gap-3 mb-5 pl-1 justify-between">
+                            <div className="flex items-center gap-3">
+                                <button onClick={() => setActiveTab('hub')} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-all cursor-pointer">
+                                    <ChevronLeft className="w-5 h-5" />
+                                </button>
+                                <div>
+                                    <h2 className="text-base font-bold text-slate-800 leading-none">Jobsite Sites Directory</h2>
+                                    <p className="text-xs text-slate-500 mt-1">Specify building codes, residential slots, and active projects</p>
+                                </div>
                             </div>
-                            <button 
-                                onClick={() => setIsAddingJob(!isAddingJob)}
-                                className="bg-blue-950 text-white text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-gray-800"
-                            >
-                                {isAddingJob ? 'Cancel' : '+ New Job'}
-                            </button>
                         </div>
 
-                        {isAddingJob && (
-                            <form onSubmit={handleAddJob} className="flex gap-2 p-3 bg-gray-50 rounded-xl border border-gray-100 pb-3">
-                                <input 
-                                    type="text"
-                                    placeholder="Customer / Job Name"
-                                    value={newJobName}
-                                    onChange={e => setNewJobName(e.target.value)}
-                                    className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none"
-                                />
-                                <button type="submit" className="bg-[#2563eb] text-white text-sm font-bold px-4 py-2 rounded-lg hover:bg-blue-600">
-                                    Save Job
+                        {/* Control actions */}
+                        <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm mb-4">
+                            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+                                <span className="text-[11px] font-bold tracking-wider text-slate-400 uppercase">Site Registers</span>
+                                <button 
+                                    onClick={() => {
+                                        setIsAddingJob(!isAddingJob);
+                                        setNewJobName('');
+                                    }}
+                                    className="bg-blue-950 text-white text-xs font-bold px-3 py-1.5 rounded-xl hover:bg-slate-900 transition-all flex items-center gap-1 cursor-pointer"
+                                >
+                                    {isAddingJob ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />} {isAddingJob ? 'Cancel' : 'New Project'}
                                 </button>
-                            </form>
-                        )}
+                            </div>
 
-                        <div className="space-y-2 mt-2">
-                            {(adminData?.projects || []).length > 0 ? (
-                                (adminData?.projects || []).map((proj, idx) => (
-                                    <div key={idx} className="flex justify-between items-center p-4 bg-gray-50 rounded-xl border border-gray-100 hover:border-gray-200 transition-all">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
-                                                <Users className="w-4 h-4 text-[#2563eb]" />
-                                            </div>
-                                            <span className="font-semibold text-gray-700 text-sm">{proj}</span>
-                                        </div>
-                                        {proj !== 'General' && (
-                                            <button 
-                                                onClick={() => handleDeleteJob(proj)}
-                                                className="w-10 h-10 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors flex items-center justify-center border border-gray-200 bg-white shadow-sm"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        )}
+                            {/* Inline Adds Job elements */}
+                            {isAddingJob && (
+                                <form onSubmit={handleAddJob} className="p-4 bg-slate-50 border border-slate-150 rounded-2xl flex flex-col gap-3.5 animate-in slide-in-from-top duration-300">
+                                    <h4 className="text-xs font-bold text-slate-700 leading-none">Register New Site</h4>
+                                    <div>
+                                        <label className="block text-[8px] font-bold text-slate-400 uppercase mb-1 ml-1">Building name / address code *</label>
+                                        <input 
+                                            type="text" required placeholder="E.g., 104 Maple Ave (Plumbing)"
+                                            value={newJobName} onChange={e => setNewJobName(e.target.value)}
+                                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        />
                                     </div>
-                                ))
-                            ) : (
-                                <div className="py-8 text-center text-gray-400 text-sm font-bold">
-                                    No Customer Jobs registered yet.
-                                </div>
+                                    <button type="submit" className="bg-blue-600 text-white text-xs font-bold py-2 px-4 rounded-lg hover:bg-blue-700 shadow-sm self-end cursor-pointer">
+                                        Activate Site Code
+                                    </button>
+                                </form>
                             )}
+
+                            {/* Site List Scroll block */}
+                            <div className="space-y-2">
+                                {(adminData?.projects || []).length > 0 ? (
+                                    (adminData?.projects || []).map((proj, idx) => (
+                                        <div key={idx} className="flex justify-between items-center p-3.5 bg-slate-50/50 border border-slate-150/60 rounded-xl hover:border-slate-350 hover:bg-slate-50 transition-all">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-650 flex items-center justify-center font-semibold">
+                                                    <Briefcase className="w-4 h-4 stroke-[2]" />
+                                                </div>
+                                                <span className="font-bold text-slate-700 text-sm leading-tight">{proj}</span>
+                                            </div>
+                                            {proj !== 'General' && (
+                                                <button 
+                                                    onClick={() => handleDeleteJob(proj)}
+                                                    className="w-8 h-8 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors flex items-center justify-center border border-slate-200 bg-white shadow-sm cursor-pointer"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="py-8 text-center text-slate-400 text-sm font-semibold">
+                                        No active building sites registered.
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 )}
 
+                {/* F. INVOICING & INVOICES PAST ARCHIVE VIEWPORT */}
                 {activeTab === 'invoices' && (
-                    <div className="space-y-6">
+                    <div className="flex-1 flex flex-col animate-in slide-in-from-right duration-200">
+                        {/* Navigation Sub-Header */}
+                        <div className="flex items-center gap-3 mb-5 pl-1 justify-between">
+                            <div className="flex items-center gap-3">
+                                <button onClick={() => { setActiveTab('hub'); setIsCreatingInvoice(false); }} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-all cursor-pointer">
+                                    <ChevronLeft className="w-5 h-5" />
+                                </button>
+                                <div>
+                                    <h2 className="text-base font-bold text-slate-800 leading-none">{isCreatingInvoice ? 'Draft Invoice Bill' : 'Invoice Billing Console'}</h2>
+                                    <p className="text-xs text-slate-500 mt-1">{isCreatingInvoice ? 'Extract clocked hours and custom extra line services' : 'Review historical PDFs and draft fresh balances client invoices'}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Invoice List screen */}
                         {!isCreatingInvoice ? (
-                            <div className="flex flex-col gap-4">
-                                <div className="flex justify-between items-center">
-                                    <h2 className="text-lg font-bold text-gray-800">Past Invoices</h2>
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center mb-1 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                                    <span className="text-[11px] font-bold text-slate-450 uppercase tracking-wider">PDF BALANCES DIRECTORY</span>
                                     <button 
-                                        onClick={() => setIsCreatingInvoice(true)}
-                                        className="bg-blue-950 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-gray-800 flex items-center gap-1.5"
+                                        onClick={() => {
+                                            setIsCreatingInvoice(true);
+                                            setInvoiceCustomer('');
+                                            setInvoiceMarkup(1.0);
+                                            setInvoiceSelectedEntries(new Set());
+                                            setInvoiceManualItems([]);
+                                        }}
+                                        className="bg-blue-950 hover:bg-slate-900 border border-transparent shadow shadow-blue-950/20 text-white font-bold text-xs py-2 px-3.5 rounded-xl flex items-center gap-1 cursor-pointer transition-transform"
                                     >
-                                        <Plus className="w-4 h-4" /> New Invoice
+                                        <Plus className="w-3.5 h-3.5" /> Fresh Invoice
                                     </button>
                                 </div>
+
                                 <div className="space-y-3">
                                     {adminData?.invoices && adminData.invoices.length > 0 ? (
                                         adminData.invoices.map((inv, idx) => (
-                                            <div key={idx} className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:border-gray-300 transition-all">
-                                                <div className="flex justify-between items-start">
+                                            <div key={idx} className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm hover:border-slate-300 transition-all">
+                                                <div className="flex justify-between items-start gap-4">
                                                     <div>
-                                                        <p className="font-extrabold text-gray-800 text-sm">{inv.customerName}</p>
-                                                        <p className="text-xs font-semibold text-gray-400 mt-0.5">{new Date(inv.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</p>
-                                                        <span className="inline-block mt-2 text-[10px] bg-gray-100 text-gray-500 font-bold px-2 py-0.5 rounded uppercase">ID: {inv.id.substring(0, 8)}</span>
+                                                        <h3 className="font-extrabold text-slate-800 text-sm leading-snug">{inv.customerName}</h3>
+                                                        <p className="text-xs font-semibold text-slate-400 mt-1 flex items-center gap-1.5">
+                                                            <Calendar className="w-3.5 h-3.5" />
+                                                            {new Date(inv.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                                                        </p>
+                                                        <span className="inline-block mt-2.5 text-[9px] bg-slate-50 border border-slate-100 text-slate-500 font-bold px-2 py-0.5 rounded uppercase tracking-wider">ID: {inv.id.substring(0, 8)}</span>
                                                     </div>
                                                     <div className="text-right flex flex-col items-end">
-                                                        <p className="font-extrabold text-[#10b981] text-base">${inv.total.toFixed(2)}</p>
-                                                        <p className="text-xs font-bold text-gray-500 mt-0.5">{inv.timeEntryIds.length} time entries</p>
+                                                        <p className="font-black text-emerald-600 text-[18px] leading-none">${inv.total.toFixed(2)}</p>
+                                                        <p className="text-[10px] font-bold text-slate-400 mt-1.5">{inv.timeEntryIds.length} hours-tracked entries</p>
                                                         
                                                         <button 
                                                             onClick={() => generateInvoicePDF(inv, adminData.users, adminData.entries)}
-                                                            className="mt-3 flex items-center gap-1.5 text-xs font-extrabold text-[#2563eb] bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-100 transition-colors"
+                                                            className="mt-3 inline-flex items-center gap-1 text-[11px] font-bold text-blue-650 bg-blue-50 border border-blue-100 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
                                                         >
-                                                            <Download className="w-3.5 h-3.5" />
-                                                            Download PDF
+                                                            <Download className="w-3.5 h-3.5" /> PDF Download
                                                         </button>
                                                     </div>
                                                 </div>
                                             </div>
                                         ))
                                     ) : (
-                                        <div className="bg-white p-8 rounded-2xl border border-gray-100 flex justify-center text-gray-400 font-bold text-sm">
-                                            No invoices created yet.
+                                        <div className="bg-white p-8 rounded-2xl border border-slate-100 text-center shadow-sm">
+                                            <p className="text-slate-400 text-sm font-semibold">No past client invoices saved in master sheets.</p>
                                         </div>
                                     )}
                                 </div>
                             </div>
                         ) : (
-                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-                                <div className="flex justify-between items-center mb-6">
-                                    <h2 className="text-lg font-bold text-gray-800">Create Invoice</h2>
-                                    <button onClick={() => setIsCreatingInvoice(false)} className="text-xs font-bold text-gray-400">Cancel</button>
+                            /* Create Invoice visual step-board Form */
+                            <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm space-y-5 animate-in fade-in duration-300">
+                                <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Creation Elements</h3>
+                                    <button onClick={() => setIsCreatingInvoice(false)} className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer">Back to List</button>
                                 </div>
                                 
                                 <div className="space-y-4">
+                                    {/* Select Client customer */}
                                     <div>
-                                        <label className="block text-xs font-bold text-gray-500 mb-1 ml-1 uppercase">Customer Name</label>
-                                        <div className="flex gap-2">
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Properties Client Accounts *</label>
+                                        <div className="flex flex-col gap-2">
                                             <select 
-                                                className="w-1/2 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563eb] focus:bg-white transition-all text-sm font-semibold"
+                                                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs font-bold text-slate-700 cursor-pointer"
                                                 onChange={e => setInvoiceCustomer(e.target.value)}
                                                 value={invoiceCustomer}
                                             >
-                                                <option value="">-- Select Customer --</option>
+                                                <option value="">-- Associate Customer Profile --</option>
                                                 {adminData?.customers?.map(c => (
                                                     <option key={c.id} value={c.name}>{c.name}</option>
                                                 ))}
@@ -865,87 +1198,97 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                                                 type="text"
                                                 value={invoiceCustomer}
                                                 onChange={e => setInvoiceCustomer(e.target.value)}
-                                                className="w-1/2 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563eb] focus:bg-white transition-all text-sm font-semibold"
-                                                placeholder="Or type custom name..."
+                                                className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs font-semibold placeholder-slate-400"
+                                                placeholder="Or manually overrule specific client name..."
                                             />
                                         </div>
                                     </div>
                                     
+                                    {/* Selectable Hours Entries Checklist container */}
                                     <div>
-                                        <label className="block text-xs font-bold text-gray-500 mb-1 ml-1 uppercase">Select Time Entries</label>
-                                        <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-xl bg-gray-50 p-2 space-y-1">
-                                            {adminData?.entries.map(e => {
-                                                const u = adminData?.users.find(u => u.id === e.profileId);
-                                                const dur = (new Date(e.clockOut || Date.now()).getTime() - new Date(e.clockIn).getTime()) / 3600000;
-                                                const cost = Math.max(0, dur) * (u ? parseFloat(u.hourlyWage) : 0);
-                                                const selected = invoiceSelectedEntries.has(e.id);
-                                                return (
-                                                    <div 
-                                                        key={e.id} 
-                                                        onClick={() => {
-                                                            const next = new Set(invoiceSelectedEntries);
-                                                            if (selected) next.delete(e.id); else next.add(e.id);
-                                                            setInvoiceSelectedEntries(next);
-                                                        }}
-                                                        className={`p-3 rounded-lg cursor-pointer flex justify-between border ${selected ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-100 hover:border-gray-300'}`}
-                                                    >
-                                                        <div>
-                                                            <p className="font-bold text-xs text-gray-800">{new Date(e.clockIn).toLocaleDateString()} - {u?.name}</p>
-                                                            <p className="text-[10px] text-gray-500 mt-0.5">{e.projectName} &bull; {Math.max(0, dur).toFixed(2)}h</p>
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">Clocked Hours checklist</label>
+                                        <div className="max-h-56 overflow-y-auto border border-slate-150 rounded-xl bg-slate-50/50 p-2.5 space-y-1.5 shadow-inner">
+                                            {adminData?.entries.filter(e => e.clockOut).length === 0 ? (
+                                                <p className="text-[11px] text-slate-450 font-semibold text-center py-4">No completed hours logs stored.</p>
+                                            ) : (
+                                                adminData?.entries.filter(e => e.clockOut).map(e => {
+                                                    const u = adminData?.users.find(u => u.id === e.profileId);
+                                                    const dur = (new Date(e.clockOut || Date.now()).getTime() - new Date(e.clockIn).getTime()) / 3600000;
+                                                    const cost = Math.max(0, dur) * (u ? parseFloat(u.hourlyWage) : 0);
+                                                    const selected = invoiceSelectedEntries.has(e.id);
+                                                    return (
+                                                        <div 
+                                                            key={e.id} 
+                                                            onClick={() => {
+                                                                const next = new Set(invoiceSelectedEntries);
+                                                                if (selected) next.delete(e.id); else next.add(e.id);
+                                                                setInvoiceSelectedEntries(next);
+                                                            }}
+                                                            className={`p-3 rounded-xl cursor-pointer flex justify-between items-center border transition-all ${selected ? 'bg-blue-50 border-blue-300 text-blue-750' : 'bg-white border-slate-150 hover:border-slate-350 text-slate-700'}`}
+                                                        >
+                                                            <div className="min-w-0 pr-2">
+                                                                <p className="font-bold text-xs leading-normal truncate">{new Date(e.clockIn).toLocaleDateString()} &mdash; {u?.name}</p>
+                                                                <p className="text-[10px] text-slate-450 font-bold mt-1 leading-none">{e.projectName} &bull; {Math.max(0, dur).toFixed(2)}h</p>
+                                                            </div>
+                                                            <div className="text-right shrink-0">
+                                                                <span className="font-extrabold text-xs text-emerald-600 block">${cost.toFixed(2)}</span>
+                                                            </div>
                                                         </div>
-                                                        <div className="text-right">
-                                                            <p className="font-bold text-sm text-[#10b981]">${cost.toFixed(2)}</p>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
+                                                    );
+                                                })
+                                            )}
                                         </div>
                                     </div>
 
+                                    {/* Markup selector multiplier */}
                                     <div>
-                                        <label className="block text-xs font-bold text-gray-500 mb-1 ml-1 uppercase">Markup Multiplier</label>
-                                        <div className="flex items-center gap-2">
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Fee multi markup</label>
+                                        <div className="flex items-center gap-3">
                                             <input
                                                 type="number"
                                                 value={invoiceMarkup}
                                                 onChange={e => setInvoiceMarkup(parseFloat(e.target.value) || 1)}
                                                 step="0.1"
                                                 min="1"
-                                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563eb] text-sm font-semibold"
+                                                className="w-24 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs font-semibold"
                                             />
-                                            <span className="text-xs font-bold text-gray-400">e.g. 1.5x</span>
+                                            <span className="text-[11px] font-bold text-slate-400">Default is 1.0 (No premium markup) &bull; 1.5 equates to 50% extra fee</span>
                                         </div>
                                     </div>
                                     
-                                    <div className="pt-4 border-t border-gray-100">
-                                        <label className="block text-xs font-bold text-gray-500 mb-2 ml-1 uppercase">Manual Line Items</label>
+                                    {/* Manual Extra services line additions */}
+                                    <div className="pt-4 border-t border-slate-100">
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">Custom extra manual fee additions</label>
+                                        
                                         {invoiceManualItems.map((mi, idx) => (
-                                            <div key={idx} className="flex justify-between items-center bg-gray-50 p-3 rounded-lg mb-2">
-                                                <span className="text-sm font-bold text-gray-700">{mi.description}</span>
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-sm font-extrabold text-[#10b981]">${mi.amount.toFixed(2)}</span>
-                                                    <button onClick={() => setInvoiceManualItems(invoiceManualItems.filter(i => i.id !== mi.id))} className="text-red-400 hover:text-red-600">
+                                            <div key={idx} className="flex justify-between items-center bg-slate-50 py-2 px-3 border border-slate-150 rounded-xl mb-2">
+                                                <span className="text-xs font-bold text-slate-700 leading-normal">{mi.description}</span>
+                                                <div className="flex items-center gap-2.5">
+                                                    <span className="text-xs font-black text-emerald-600">${mi.amount.toFixed(2)}</span>
+                                                    <button onClick={() => setInvoiceManualItems(invoiceManualItems.filter(i => i.id !== mi.id))} className="text-slate-400 hover:text-red-500">
                                                         <Trash2 className="w-4 h-4" />
                                                     </button>
                                                 </div>
                                             </div>
                                         ))}
+
                                         <div className="flex gap-2">
                                             <input 
-                                                type="text" placeholder="Description" 
+                                                type="text" placeholder="Description: e.g., Concrete supply" 
                                                 value={newManualItemDesc} onChange={e => setNewManualItemDesc(e.target.value)}
-                                                className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
+                                                className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
                                             />
                                             <input 
-                                                type="number" placeholder="$" step="0.01" 
+                                                type="number" placeholder="Cost ($)" step="0.01" 
                                                 value={newManualItemAmt} onChange={e => setNewManualItemAmt(e.target.value)}
-                                                className="w-24 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
+                                                className="w-20 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
                                             />
-                                            <button onClick={handleAddManualItem} type="button" className="bg-gray-200 px-3 py-2 rounded-lg font-bold hover:bg-gray-300 text-gray-600">Add</button>
+                                            <button onClick={handleAddManualItem} type="button" className="bg-slate-150 hover:bg-slate-250 shrink-0 px-3 py-2 rounded-lg font-bold text-xs text-slate-700 transition-colors cursor-pointer">Append</button>
                                         </div>
                                     </div>
                                     
-                                    <div className="pt-6 mt-6 border-t border-gray-200">
+                                    {/* Total Calculator board */}
+                                    <div className="pt-5 mt-5 border-t border-slate-150">
                                         {(() => {
                                             // calc totals
                                             let entriesCost = 0;
@@ -962,30 +1305,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                                             const finalTotal = subtotal + manualTotal;
                                             
                                             return (
-                                                <div className="space-y-4">
-                                                    <div className="flex justify-between items-center text-sm font-semibold text-gray-500">
-                                                        <span>Time Entries Cost:</span>
-                                                        <span>${entriesCost.toFixed(2)}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center text-sm font-semibold text-gray-500">
-                                                        <span>Markup (x{invoiceMarkup}):</span>
-                                                        <span>${subtotal.toFixed(2)}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center text-sm font-semibold text-gray-500">
-                                                        <span>Manual Items:</span>
-                                                        <span>${manualTotal.toFixed(2)}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center text-lg font-black text-gray-900 border-t border-gray-100 pt-3">
-                                                        <span>Final Total:</span>
-                                                        <span className="text-[#10b981]">${finalTotal.toFixed(2)}</span>
+                                                <div className="space-y-3.5">
+                                                    <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-2.5">
+                                                        <div className="flex justify-between items-center text-xs font-bold text-slate-500">
+                                                            <span>Timesheets Base Value:</span>
+                                                            <span className="text-slate-800">${entriesCost.toFixed(2)}</span>
+                                                        </div>
+                                                        <div className="flex justify-between items-center text-xs font-bold text-slate-500">
+                                                            <span>Marked Value (Multi x{invoiceMarkup}):</span>
+                                                            <span className="text-slate-850 font-extrabold">${subtotal.toFixed(2)}</span>
+                                                        </div>
+                                                        <div className="flex justify-between items-center text-xs font-bold text-slate-500">
+                                                            <span>Extra Services added:</span>
+                                                            <span className="text-slate-800">${manualTotal.toFixed(2)}</span>
+                                                        </div>
+                                                        <div className="flex justify-between items-center text-sm font-black text-slate-900 border-t border-slate-150 pt-2.5 mt-1">
+                                                            <span>Sum of Invoice Balance:</span>
+                                                            <span className="text-emerald-600 text-lg">${finalTotal.toFixed(2)}</span>
+                                                        </div>
                                                     </div>
                                                     
                                                     <button 
                                                         onClick={() => handleSaveInvoice(finalTotal)}
-                                                        disabled={isLoading}
-                                                        className="w-full mt-4 bg-[#2563eb] text-white py-4 rounded-xl font-bold shadow-md hover:bg-blue-600 transition-colors disabled:opacity-50"
+                                                        disabled={isLoading || !invoiceCustomer.trim()}
+                                                        className="w-full mt-2 bg-blue-950 text-white hover:bg-slate-900 py-4 rounded-xl font-bold text-xs shadow-md transition-all active:scale-98 disabled:opacity-40 cursor-pointer"
                                                     >
-                                                        {isLoading ? 'Saving...' : 'Save & Generate Invoice'}
+                                                        {isLoading ? 'Processing Save...' : 'Finalize & Generate PDF timesheet'}
                                                     </button>
                                                 </div>
                                             );
@@ -997,65 +1342,89 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                     </div>
                 )}
 
+                {/* G. FIELD MESSAGES VIEWPORT */}
                 {activeTab === 'chat' && (
-                    <div className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden flex flex-col h-[calc(100vh-220px)]">
-                        <Messaging profile={safeProfile as any} />
+                    <div className="flex-1 flex flex-col h-[calc(100vh-180px)] overflow-hidden animate-in slide-in-from-right duration-200">
+                        {/* Sub-Header */}
+                        <div className="flex items-center gap-3 mb-4 pl-1 shrink-0">
+                            <button onClick={() => setActiveTab('hub')} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-all cursor-pointer">
+                                <ChevronLeft className="w-5 h-5" />
+                            </button>
+                            <div>
+                                <h1 className="text-base font-bold text-slate-800 leading-none">Global Broadcast</h1>
+                                <p className="text-xs text-slate-500 mt-1">Read and reply directly with field staff logs</p>
+                            </div>
+                        </div>
+
+                        {/* Messaging wrapper box */}
+                        <div className="flex-1 bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm flex flex-col">
+                            <Messaging profile={safeProfile as any} />
+                        </div>
                     </div>
                 )}
 
+                {/* H. COMPANY CONFIG VALUES VIEWPORT */}
                 {activeTab === 'company' && (
-                    <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-5 flex flex-col gap-5">
-                        <div>
-                            <h2 className="text-lg font-bold text-gray-800">Company Identity</h2>
-                            <p className="text-xs text-gray-500 mt-1">This information appears on generated PDF timesheets and invoices.</p>
-                        </div>
-                        
-                        <div className="flex flex-col gap-4">
+                    <div className="flex-1 flex flex-col animate-in slide-in-from-right duration-200">
+                        {/* Sub-Header */}
+                        <div className="flex items-center gap-3 mb-5 pl-1 shrink-0">
+                            <button onClick={() => setActiveTab('hub')} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-all cursor-pointer">
+                                <ChevronLeft className="w-5 h-5" />
+                            </button>
                             <div>
-                                <label className="text-xs font-bold text-gray-600 uppercase mb-1.5 block">Business Name</label>
+                                <h1 className="text-base font-bold text-slate-800 leading-none">Business Profile</h1>
+                                <p className="text-xs text-slate-500 mt-0.5">Adjust physical contacts, addresses and phone indices</p>
+                            </div>
+                        </div>
+
+                        {/* Config cards */}
+                        <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm space-y-4">
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Trade Business Name</label>
                                 <input 
                                     type="text" 
-                                    className="w-full bg-gray-50 border border-gray-200 text-sm font-semibold rounded-xl px-3 py-3"
+                                    className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 rounded-xl px-3 py-3 focus:outline-none focus:ring-1 focus:ring-blue-500"
                                     value={companyInfo.businessName}
                                     onChange={e => setCompanyInfo({...companyInfo, businessName: e.target.value})}
-                                    placeholder="e.g. GEOTIME CONTRACTING"
+                                    placeholder="e.g. SP SERVICES GROUP INC"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-gray-600 uppercase mb-1.5 block">Description / Tagline</label>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Footer Legal Slogans</label>
                                 <input 
                                     type="text" 
-                                    className="w-full bg-gray-50 border border-gray-200 text-sm font-semibold rounded-xl px-3 py-3"
+                                    className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 rounded-xl px-3 py-3 focus:outline-none focus:ring-1 focus:ring-blue-500"
                                     value={companyInfo.tagline}
                                     onChange={e => setCompanyInfo({...companyInfo, tagline: e.target.value})}
-                                    placeholder="e.g. PREMIUM TRACKED TIME INVOICING"
+                                    placeholder="e.g. PREMIUM INVOICED SERVICES & WORK LOGS"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-gray-600 uppercase mb-1.5 block">Contact Phone & Email</label>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Support contact phone / mail</label>
                                 <input 
                                     type="text" 
-                                    className="w-full bg-gray-50 border border-gray-200 text-sm font-semibold rounded-xl px-3 py-3"
+                                    className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 rounded-xl px-3 py-3 focus:outline-none focus:ring-1 focus:ring-blue-500"
                                     value={companyInfo.contactLine}
                                     onChange={e => setCompanyInfo({...companyInfo, contactLine: e.target.value})}
-                                    placeholder="e.g. Contact: mail@co.com | Tel: 555-5555"
+                                    placeholder="e.g. billing@sp.com | Tel: 555-5555"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-gray-600 uppercase mb-1.5 block">Business Address</label>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Physical Trading Address</label>
                                 <textarea 
-                                    className="w-full bg-gray-50 border border-gray-200 text-sm font-semibold rounded-xl px-3 py-3 h-24 resize-none"
+                                    className="w-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 rounded-xl px-3.5 py-3 h-24 resize-none focus:outline-none focus:ring-1 focus:ring-blue-500 leading-normal"
                                     value={companyInfo.address}
                                     onChange={e => setCompanyInfo({...companyInfo, address: e.target.value})}
-                                    placeholder="123 Main St&#10;City, State 12345"
+                                    placeholder="123 Builder way&#10;City, State 12345"
                                 />
                             </div>
-                            
+
                             <button 
                                 onClick={handleSaveCompanyInfo}
-                                className="w-full mt-2 bg-blue-950 text-white py-3.5 rounded-xl font-bold shadow-md hover:bg-gray-800 transition-colors"
+                                disabled={isLoading}
+                                className="w-full mt-1 bg-blue-950 text-white hover:bg-slate-900 py-3.5 rounded-xl font-bold text-xs tracking-wider uppercase shadow-md transition-all active:scale-98 cursor-pointer disabled:opacity-40"
                             >
-                                Save Settings
+                                {isLoading ? 'Saving...' : 'Sync Master Company Settings'}
                             </button>
                         </div>
                     </div>

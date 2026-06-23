@@ -18,9 +18,9 @@ const getCompanyInfo = (): CompanyInfo => {
     } catch {}
     // Default fallback
     return {
-        businessName: 'GEOTIME CONTRACTING',
+        businessName: 'PROCONTRACTOR',
         tagline: 'PREMIUM TRACKED TIME & FIELD SERVICES INVOICING',
-        contactLine: 'Contact: smartcontracting@geotime.com | Tel: (555) 019-9238',
+        contactLine: 'Contact: billing@procontractor.com | Tel: (555) 019-9238',
         address: ''
     };
 };
@@ -29,7 +29,7 @@ export const generatePayReport = (profile: UserProfile, timeEntries: TimeEntry[]
     const doc = new jsPDF();
     const company = getCompanyInfo();
 
-    // Color Palette matching GeoTime branding
+    // Color Palette matching ProContractor branding
     const primaryColor = [16, 23, 38]; // Deep Navy (#101726)
     const accentColor = [249, 115, 22]; // Safety Orange (#f97316)
 
@@ -384,14 +384,14 @@ export const generateInvoicePDF = (invoice: Invoice, allUsers: UserProfile[], al
     doc.text('1. Payment is strictly requested within 15 calendar days from date issue.', 14, finalY + 20);
     doc.text('2. Please reference Invoice Number on ACH bank transfer or checks.', 14, finalY + 25);
     doc.text('3. Late payments subject to standard 1.5% company service penalty per month.', 14, finalY + 30);
-    doc.text('For queries, contact support: billing@geotime.com', 14, finalY + 37);
+    doc.text('For queries, contact support: billing@procontractor.com', 14, finalY + 37);
 
     // Decorative bottom brand indicator line
     doc.setFillColor(16, 23, 38);
     doc.rect(14, 275, 182, 3, 'F');
     doc.setFontSize(7.5);
     doc.setTextColor(148, 163, 184);
-    doc.text('Page 1 of 1  • Generated securely via GeoTime Verification Engine', 14, 283);
+    doc.text('Page 1 of 1  • Generated securely via ProContractor Verification Engine', 14, 283);
     doc.text('THANK YOU FOR YOUR VALUED BUSINESS!', 196, 283, { align: 'right' });
 
     doc.save(`Invoice_${invoice.customerName.replace(/[^a-zA-Z0-9]/g, '_')}_${invoice.id.toUpperCase()}.pdf`);

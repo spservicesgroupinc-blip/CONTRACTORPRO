@@ -53,9 +53,9 @@ function setup() {
     companySheet.appendRow(["Key", "Value"]);
     companySheet.getRange("A1:B1").setFontWeight("bold");
     companySheet.setFrozenRows(1);
-    companySheet.appendRow(["businessName", "GEOTIME CONTRACTING"]);
+    companySheet.appendRow(["businessName", "PROCONTRACTOR"]);
     companySheet.appendRow(["tagline", "PREMIUM TRACKED TIME & FIELD SERVICES INVOICING"]);
-    companySheet.appendRow(["contactLine", "Contact: smartcontracting@geotime.com | Tel: (555) 019-9238"]);
+    companySheet.appendRow(["contactLine", "Contact: billing@procontractor.com | Tel: (555) 019-9238"]);
     companySheet.appendRow(["address", ""]);
   }
 
@@ -194,9 +194,9 @@ function doPost(e) {
       }
 
       let companyInfo = {
-        businessName: 'GEOTIME CONTRACTING',
+        businessName: 'PROCONTRACTOR',
         tagline: 'PREMIUM TRACKED TIME & FIELD SERVICES INVOICING',
-        contactLine: 'Contact: smartcontracting@geotime.com | Tel: (555) 019-9238',
+        contactLine: 'Contact: billing@procontractor.com | Tel: (555) 019-9238',
         address: ''
       };
       if (cInfoData.length > 1) {
@@ -408,9 +408,9 @@ function doGet(e) {
   if (companySheet) {
     const cInfoData = companySheet.getDataRange().getValues();
     companyInfo = {
-        businessName: 'GEOTIME CONTRACTING',
+        businessName: 'PROCONTRACTOR',
         tagline: 'PREMIUM TRACKED TIME & FIELD SERVICES INVOICING',
-        contactLine: 'Contact: smartcontracting@geotime.com | Tel: (555) 019-9238',
+        contactLine: 'Contact: billing@procontractor.com | Tel: (555) 019-9238',
         address: ''
     };
     if (cInfoData.length > 1) {
