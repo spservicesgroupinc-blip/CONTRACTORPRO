@@ -57,7 +57,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
     const [unreadChatCount, setUnreadChatCount] = useState(0);
     
     // Hub State ('hub' is the main dashboard launcher, replacing a big clutter of buttons)
-    const [activeTab, setActiveTab] = useState<'hub' | 'live' | 'employees' | 'customers' | 'invoices' | 'jobs' | 'chat' | 'company'>('hub');
+    const [activeTab, setActiveTabState] = useState<'hub' | 'live' | 'employees' | 'customers' | 'invoices' | 'jobs' | 'chat' | 'company'>('hub');
+
+    const setActiveTab = async (tab: 'hub' | 'live' | 'employees' | 'customers' | 'invoices' | 'jobs' | 'chat' | 'company') => {
+        setActiveTabState(tab);
+        if (tab !== 'hub') {
+            await fetchAdminData();
+        }
+    };
 
     // Company Info State
     const [companyInfo, setCompanyInfo] = useState({
@@ -108,6 +115,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
         };
     }, [isAuthenticated]);
 
+    // Auto-poll if on live tracking tab
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+        if (activeTab === 'live' && isAuthenticated) {
+            interval = setInterval(() => {
+                fetchAdminData(true);
+            }, 10000);
+        }
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [activeTab, isAuthenticated]);
+
     const handleSaveCompanyInfo = async () => {
         setIsLoading(true);
         try {
@@ -140,8 +160,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
         }
     };
 
-    const fetchAdminData = async () => {
-        setIsLoading(true);
+    const fetchAdminData = async (isBackgroundPoll: boolean = false) => {
+        if (!isBackgroundPoll) setIsLoading(true);
         setError('');
         try {
             const response = await fetch('/api/sync', {
@@ -164,7 +184,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
         } catch (err: any) {
             setError("Error syncing from master sheet.");
         } finally {
-            setIsLoading(false);
+            if (!isBackgroundPoll) setIsLoading(false);
         }
     };
 
@@ -692,7 +712,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                         </div>
 
                         <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm space-y-4">
-                            {adminData?.entries.filter(e => !e.clockOut).length === 0 ? (
+                            {isLoading ? (
+                                <div className="py-8 text-center flex justify-center">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-900 border-t-transparent"></div>
+                                </div>
+                            ) : adminData?.entries.filter(e => !e.clockOut).length === 0 ? (
                                 <div className="py-8 text-center">
                                     <UserX className="w-10 h-10 text-slate-300 mx-auto mb-2" />
                                     <p className="text-slate-400 text-sm font-semibold">No employees currently clocked in.</p>
