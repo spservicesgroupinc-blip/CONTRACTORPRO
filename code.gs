@@ -98,33 +98,65 @@ function doPost(e) {
     if (action === "SYNC_ENTRIES") {
       const timeSheet = ss.getSheetByName("TimeEntries");
       const existingData = timeSheet.getDataRange().getValues();
-      const existingIds = new Set(existingData.slice(1).map(row => row[0]));
+      const profileId = payload.profileId || "";
       
       const newEntries = payload.entries || [];
-      newEntries.forEach(entry => {
-        if (!existingIds.has(entry.id)) {
-          // Add new entry
-          timeSheet.appendRow([
-            entry.id,
-            payload.profileId || "",
-            entry.projectName || "General",
-            entry.clockIn || "",
-            entry.clockOut || "",
-            entry.clockInLocation?.latitude || "",
-            entry.clockInLocation?.longitude || "",
-            entry.clockOutLocation?.latitude || "",
-            entry.clockOutLocation?.longitude || ""
-          ]);
-        } else {
-          // Find and update existing row (for clock out)
+      const newEntriesMap = {};
+      newEntries.forEach(function(e) {
+        newEntriesMap[e.id] = e;
+      });
+      
+      const existingIdsInPayload = new Set();
+      
+      // Iterate backwards to safely handle deletion of rows
+      for (let i = existingData.length - 1; i >= 1; i--) {
+        const rowId = existingData[i][0];
+        const rowProfileId = existingData[i][1];
+        
+        if (rowProfileId === profileId) {
+          if (!newEntriesMap[rowId]) {
+            // Delete locally deleted entry
+            timeSheet.deleteRow(i + 1);
+          } else {
+            // Update all fields of the existing entry
+            const entry = newEntriesMap[rowId];
+            const rowIndex = i + 1;
+            timeSheet.getRange(rowIndex, 3).setValue(entry.projectName || "General");
+            timeSheet.getRange(rowIndex, 4).setValue(entry.clockIn || "");
+            timeSheet.getRange(rowIndex, 5).setValue(entry.clockOut || "");
+            timeSheet.getRange(rowIndex, 6).setValue(entry.clockInLocation?.latitude || "");
+            timeSheet.getRange(rowIndex, 7).setValue(entry.clockInLocation?.longitude || "");
+            timeSheet.getRange(rowIndex, 8).setValue(entry.clockOutLocation?.latitude || "");
+            timeSheet.getRange(rowIndex, 9).setValue(entry.clockOutLocation?.longitude || "");
+            
+            existingIdsInPayload.add(rowId);
+          }
+        }
+      }
+      
+      // Add any brand-new entries
+      newEntries.forEach(function(entry) {
+        if (!existingIdsInPayload.has(entry.id)) {
+          // Double check to avoid global duplicate IDs
+          let existsOverall = false;
           for (let i = 1; i < existingData.length; i++) {
             if (existingData[i][0] === entry.id) {
-              const rowIndex = i + 1;
-              timeSheet.getRange(rowIndex, 5).setValue(entry.clockOut || "");
-              timeSheet.getRange(rowIndex, 8).setValue(entry.clockOutLocation?.latitude || "");
-              timeSheet.getRange(rowIndex, 9).setValue(entry.clockOutLocation?.longitude || "");
+              existsOverall = true;
               break;
             }
+          }
+          if (!existsOverall) {
+            timeSheet.appendRow([
+              entry.id,
+              profileId,
+              entry.projectName || "General",
+              entry.clockIn || "",
+              entry.clockOut || "",
+              entry.clockInLocation?.latitude || "",
+              entry.clockInLocation?.longitude || "",
+              entry.clockOutLocation?.latitude || "",
+              entry.clockOutLocation?.longitude || ""
+            ]);
           }
         }
       });

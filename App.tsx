@@ -594,6 +594,18 @@ const App: React.FC = () => {
         }
     };
 
+    const handleUpdateTimeEntry = (updated: TimeEntry) => {
+        setTimeEntries(prev => prev.map(e => e.id === updated.id ? updated : e));
+    };
+
+    const handleDeleteTimeEntry = (id: string) => {
+        setTimeEntries(prev => prev.filter(e => e.id !== id));
+    };
+
+    const handleAddTimeEntry = (newEntry: TimeEntry) => {
+        setTimeEntries(prev => [...prev, newEntry]);
+    };
+
     const handleAddProject = async (e: React.FormEvent) => {
         e.preventDefault();
         const trimmed = newProjectName.trim();
@@ -1087,7 +1099,14 @@ const App: React.FC = () => {
                         </div>
 
                         <div className="bg-white rounded-2xl shadow-sm overflow-hidden mb-6">
-                            <TimeLog timeEntries={filteredPaylogEntries} profile={profile} />
+                            <TimeLog 
+                                timeEntries={filteredPaylogEntries} 
+                                profile={profile} 
+                                projects={projects}
+                                onUpdateEntry={handleUpdateTimeEntry}
+                                onDeleteEntry={handleDeleteTimeEntry}
+                                onAddEntry={handleAddTimeEntry}
+                            />
                         </div>
                     </div>
                 )}
