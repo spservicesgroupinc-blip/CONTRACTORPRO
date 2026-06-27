@@ -3,15 +3,11 @@
   "short_name": "ProContractor",
   "description": "GPS-stamped time tracking for construction teams, complete with invoicing and payroll reporting.",
   "start_url": "/",
-  "scope": "/",
   "display": "standalone",
-  "display_override": ["window-controls-overlay", "minimal-ui"],
   "background_color": "#101726",
   "theme_color": "#f97316",
   "orientation": "portrait-primary",
   "categories": ["business", "productivity", "utilities"],
-  "lang": "en-US",
-  "dir": "ltr",
   "icons": [
     {
       "src": "/pwa-icon.svg",
@@ -37,34 +33,5 @@
       "type": "image/svg+xml",
       "purpose": "maskable"
     }
-  ],
-  "screenshots": [],
-  "shortcuts": [
-    {
-      "name": "Time Log",
-      "short_name": "Log Time",
-      "description": "Quickly log your work time",
-      "url": "/?tab=time",
-      "icons": [{ "src": "/pwa-icon.svg", "sizes": "96x96" }]
-    },
-    {
-      "name": "Tasks",
-      "short_name": "Tasks",
-      "description": "View and manage tasks",
-      "url": "/?tab=tasks",
-      "icons": [{ "src": "/pwa-icon.svg", "sizes": "96x96" }]
-    }
-  ],
-  "share_target": {
-    "action": "/",
-    "method": "POST",
-    "enctype": "multipart/form-data",
-    "params": {
-      "title": "title",
-      "text": "text",
-      "url": "url"
-    }
-  },
-  "prefer_related_applications": false,
-  "handle_links": "preferred"
+  ]
 }
