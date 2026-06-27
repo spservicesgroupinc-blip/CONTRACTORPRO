@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { generateInvoicePDF } from '../services/pdfService';
 import Messaging from './Messaging';
+import AdminBottomNav from './AdminBottomNav';
 import { chatService } from '../services/chatService';
 
 interface AdminDashboardProps {
@@ -54,6 +55,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
     const [adminData, setAdminData] = useState<AdminData | null>(null);
     const [selectedUser, setSelectedUser] = useState<string | null>(null);
     const [selectedJob, setSelectedJob] = useState<string | null>(null);
+    const [selectedWeek, setSelectedWeek] = useState<string>('all');
+    
+    // Edit time entry state
+    const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
+    const [editClockIn, setEditClockIn] = useState('');
+    const [editClockOut, setEditClockOut] = useState('');
+    const [editProject, setEditProject] = useState('');
+    
     const [unreadChatCount, setUnreadChatCount] = useState(0);
     
     // Hub State ('hub' is the main dashboard launcher, replacing a big clutter of buttons)
@@ -425,6 +434,56 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
         }
     };
 
+    const handleSaveTimeEntry = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingEntry) return;
+        setIsLoading(true);
+        try {
+            const updatedEntry = {
+                ...editingEntry,
+                clockIn: new Date(editClockIn).toISOString(),
+                clockOut: editClockOut ? new Date(editClockOut).toISOString() : undefined,
+                projectName: editProject
+            };
+            const res = await fetch('/api/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    payload: { action: 'EDIT_TIME_ENTRY', payload: { entry: updatedEntry } }
+                })
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Failed to edit time entry');
+            setEditingEntry(null);
+            await fetchAdminData();
+        } catch (err: any) {
+            alert('Failed to edit time entry: ' + err.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleDeleteTimeEntry = async (entryId: string) => {
+        if (!window.confirm('Are you sure you want to delete this time entry?')) return;
+        setIsLoading(true);
+        try {
+            const res = await fetch('/api/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    payload: { action: 'DELETE_TIME_ENTRY', payload: { entryId } }
+                })
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Failed to delete time entry');
+            await fetchAdminData();
+        } catch (err: any) {
+            alert('Failed to delete time entry: ' + err.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     if (!isAuthenticated) {
         return (
             <div className="w-full max-w-md mx-auto min-h-[100dvh] bg-slate-50 flex flex-col justify-between p-6 shadow-xl relative pb-12">
@@ -468,7 +527,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
     const filteredEntries = adminData?.entries.filter(e => {
         const matchesUser = selectedUser ? e.profileId === selectedUser : true;
         const matchesJob = selectedJob ? (e.projectName || 'General') === selectedJob : true;
-        return matchesUser && matchesJob;
+        
+        let matchesWeek = true;
+        if (selectedWeek !== 'all') {
+            const entryDate = new Date(e.clockIn);
+            const today = new Date();
+            if (selectedWeek === 'this_week') {
+                const startOfWeek = new Date(today);
+                startOfWeek.setDate(today.getDate() - today.getDay());
+                startOfWeek.setHours(0,0,0,0);
+                matchesWeek = entryDate >= startOfWeek;
+            } else if (selectedWeek === 'last_week') {
+                const startOfLastWeek = new Date(today);
+                startOfLastWeek.setDate(today.getDate() - today.getDay() - 7);
+                startOfLastWeek.setHours(0,0,0,0);
+                const endOfLastWeek = new Date(startOfLastWeek);
+                endOfLastWeek.setDate(startOfLastWeek.getDate() + 7);
+                matchesWeek = entryDate >= startOfLastWeek && entryDate < endOfLastWeek;
+            } else if (selectedWeek === 'this_month') {
+                const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                matchesWeek = entryDate >= startOfMonth;
+            }
+        }
+        
+        return matchesUser && matchesJob && matchesWeek;
     }) || [];
     
     // Totals calc
@@ -511,7 +593,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
             </header>
 
             {/* MAIN PORTAL BODY VIEWPORTS */}
-            <div className="flex-1 w-full p-5 flex flex-col">
+            <div className="flex-1 w-full p-5 flex flex-col pb-24">
                 
                 {/* A. HOME HUB VIEWPORT (Replaces the "bunch of buttons" layout with a gorgeous mobile dashboard launcher) */}
                 {activeTab === 'hub' && (
@@ -812,6 +894,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                             )}
 
                             {/* Dropdown Filters */}
+                            <div className="grid grid-cols-1 gap-2 mb-2">
+                                <div className="flex flex-col">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 ml-1">Time Period</label>
+                                    <select 
+                                        value={selectedWeek} 
+                                        onChange={(e) => setSelectedWeek(e.target.value)}
+                                        className="bg-slate-50 border border-slate-200 text-xs font-bold rounded-xl px-3 py-2.5 text-slate-700 focus:outline-none cursor-pointer"
+                                    >
+                                        <option value="all">All Time</option>
+                                        <option value="this_week">This Week</option>
+                                        <option value="last_week">Last Week</option>
+                                        <option value="this_month">This Month</option>
+                                    </select>
+                                </div>
+                            </div>
                             <div className="grid grid-cols-2 gap-2">
                                 <div className="flex flex-col">
                                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 ml-1">Staff Member</label>
@@ -911,6 +1008,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                                             <div className="text-[10px] font-bold text-slate-500 bg-slate-50/50 mt-2 px-2 py-1.5 rounded-lg flex justify-between items-center border border-slate-100">
                                                 <span>Address Scope Code:</span>
                                                 <span className="text-slate-800 font-extrabold">{e.projectName || 'General'}</span>
+                                            </div>
+                                            <div className="mt-2 flex justify-end gap-2">
+                                                <button 
+                                                    onClick={() => handleDeleteTimeEntry(e.id)}
+                                                    className="text-xs font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-lg hover:bg-red-100 transition-colors"
+                                                >
+                                                    Delete
+                                                </button>
+                                                <button 
+                                                    onClick={() => {
+                                                        setEditingEntry(e);
+                                                        setEditProject(e.projectName || 'General');
+                                                        setEditClockIn(new Date(new Date(e.clockIn).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16));
+                                                        setEditClockOut(e.clockOut ? new Date(new Date(e.clockOut).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '');
+                                                    }}
+                                                    className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
+                                                >
+                                                    Edit Entry
+                                                </button>
                                             </div>
                                         </div>
                                     );
@@ -1454,6 +1570,71 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                     </div>
                 )}
             </div>
+            
+            {/* EDIT TIME ENTRY MODAL */}
+            {editingEntry && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div 
+                        onClick={() => setEditingEntry(null)} 
+                        className="absolute inset-0 bg-slate-900/40 backdrop-blur-[1px]" 
+                    />
+                    <div className="relative bg-white w-full max-w-sm rounded-2xl shadow-xl border border-slate-105 p-5 z-10 animate-in fade-in zoom-in-95 duration-200">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="font-extrabold text-slate-800 text-sm">Edit Time Entry</h3>
+                            <button 
+                                onClick={() => setEditingEntry(null)}
+                                className="w-6 h-6 rounded-full bg-slate-150 text-slate-500 flex items-center justify-center text-xs hover:bg-slate-200 transition-colors cursor-pointer"
+                            >
+                                <X className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+                        <form onSubmit={handleSaveTimeEntry} className="space-y-4">
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Project / Job Site</label>
+                                <input 
+                                    type="text" 
+                                    value={editProject} 
+                                    onChange={(e) => setEditProject(e.target.value)}
+                                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Clock In (Local Time)</label>
+                                <input 
+                                    type="datetime-local" 
+                                    value={editClockIn} 
+                                    onChange={(e) => setEditClockIn(e.target.value)}
+                                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Clock Out (Local Time)</label>
+                                <input 
+                                    type="datetime-local" 
+                                    value={editClockOut} 
+                                    onChange={(e) => setEditClockOut(e.target.value)}
+                                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                                />
+                                <p className="text-[9px] text-slate-400 mt-1 ml-1 font-semibold">Leave empty if still clocked in.</p>
+                            </div>
+                            <button 
+                                type="submit"
+                                disabled={isLoading}
+                                className="w-full mt-2 py-3 bg-[#2563eb] hover:bg-blue-600 text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-98 disabled:opacity-50 cursor-pointer"
+                            >
+                                {isLoading ? 'Saving...' : 'Update Entry'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
+            
+            <AdminBottomNav 
+                currentTab={activeTab} 
+                setCurrentTab={setActiveTab} 
+                onMenuClick={() => setActiveTab('company')}
+            />
         </div>
     );
 };

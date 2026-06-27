@@ -281,9 +281,45 @@ class ChatService {
     }
   }
 
+  private triggerNotification(msg: ChatMessage) {
+    if (!("Notification" in window)) return;
+    
+    // Only notify if chat is not open or doc is hidden
+    if (this.isChatOpen && document.visibilityState === 'visible') return;
+
+    if (Notification.permission === "granted") {
+      try {
+        const notification = new Notification(`New message from ${msg.senderName}`, {
+          body: msg.messageText,
+          icon: '/pwa-icon.svg',
+          badge: '/pwa-icon.svg',
+          vibrate: [200, 100, 200],
+          tag: 'chat-message'
+        });
+        
+        notification.onclick = function() {
+          window.focus();
+          this.close();
+        };
+      } catch (e) {
+        console.error("Push notification failed", e);
+      }
+    }
+  }
+
+  public requestNotificationPermission() {
+    if (!("Notification" in window)) return;
+    if (Notification.permission !== "granted" && Notification.permission !== "denied") {
+      Notification.requestPermission();
+    }
+  }
+
   private mergeIncomingMessages(incoming: ChatMessage[]) {
     let hasChanges = false;
     const currentUserId = this.getCurrentUserId();
+
+    // Sort incoming just in case
+    incoming.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
     incoming.forEach(incMsg => {
       const existingIdx = this.messages.findIndex(m => m.messageId === incMsg.messageId);
@@ -295,6 +331,15 @@ class ChatService {
           status: 'sent' // Any message retrieved from database is 'sent'
         });
         hasChanges = true;
+        
+        if (incMsg.senderId !== currentUserId) {
+          // If the message is newer than what we had on startup, trigger notification
+          // We can use lastReadTimestamp to gauge if we should notify
+          const msgTime = new Date(incMsg.timestamp).getTime();
+          if (msgTime > this.lastReadTimestamp) {
+            this.triggerNotification(incMsg);
+          }
+        }
       } else {
         // If we found it, and our local state is 'pending' or 'failed',
         // but the DB already got it, mark as 'sent'.

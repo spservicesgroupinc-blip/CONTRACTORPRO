@@ -27,6 +27,7 @@ export const Messaging: React.FC<MessagingProps> = ({ profile }) => {
   useEffect(() => {
     chatService.setChatOpen(true);
     chatService.startPolling(5000);
+    chatService.requestNotificationPermission();
     const unsubscribe = chatService.subscribeToMessages((msgs) => {
       setMessages(msgs);
     });
@@ -96,6 +97,7 @@ export const Messaging: React.FC<MessagingProps> = ({ profile }) => {
     const msg = inputText.trim();
     setInputText('');
     setAiDraft(null); // Clear suggestion since user manually typed
+    chatService.requestNotificationPermission(); // Request on user gesture
     await chatService.sendMessage(msg, profile.id || '', profile.name || 'User');
   };
 

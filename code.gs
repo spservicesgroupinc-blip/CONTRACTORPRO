@@ -95,6 +95,42 @@ function doPost(e) {
     const payload = data.payload;
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     
+    if (action === "EDIT_TIME_ENTRY") {
+      const timeSheet = ss.getSheetByName("TimeEntries");
+      const existingData = timeSheet.getDataRange().getValues();
+      const updatedEntry = payload.entry;
+      if (!updatedEntry || !updatedEntry.id) {
+         return ContentService.createTextOutput(JSON.stringify({ success: false, error: "No entry ID" })).setMimeType(ContentService.MimeType.JSON);
+      }
+      for (let i = 1; i < existingData.length; i++) {
+        if (existingData[i][0] === updatedEntry.id) {
+           timeSheet.getRange(i + 1, 3).setValue(updatedEntry.projectName || "");
+           timeSheet.getRange(i + 1, 4).setValue(updatedEntry.clockIn || "");
+           timeSheet.getRange(i + 1, 5).setValue(updatedEntry.clockOut || "");
+           timeSheet.getRange(i + 1, 6).setValue(updatedEntry.clockInLocation ? JSON.stringify(updatedEntry.clockInLocation) : "");
+           timeSheet.getRange(i + 1, 7).setValue(updatedEntry.clockOutLocation ? JSON.stringify(updatedEntry.clockOutLocation) : "");
+           return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: false, error: "Entry not found" })).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    if (action === "DELETE_TIME_ENTRY") {
+      const timeSheet = ss.getSheetByName("TimeEntries");
+      const existingData = timeSheet.getDataRange().getValues();
+      const entryId = payload.entryId;
+      if (!entryId) {
+         return ContentService.createTextOutput(JSON.stringify({ success: false, error: "No entry ID" })).setMimeType(ContentService.MimeType.JSON);
+      }
+      for (let i = 1; i < existingData.length; i++) {
+        if (existingData[i][0] === entryId) {
+           timeSheet.deleteRow(i + 1);
+           return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: false, error: "Entry not found" })).setMimeType(ContentService.MimeType.JSON);
+    }
+    
     if (action === "SYNC_ENTRIES") {
       const timeSheet = ss.getSheetByName("TimeEntries");
       const existingData = timeSheet.getDataRange().getValues();
@@ -285,20 +321,20 @@ function doPost(e) {
     if (action === "SAVE_COMPANY_INFO") {
       const companySheet = ss.getSheetByName("CompanyInfo");
       const existingData = companySheet.getDataRange().getValues();
-      const keys = Object.keys(reqPayload);
+      const keys = Object.keys(payload);
       
       keys.forEach(k => {
          let found = false;
          for (let i = 1; i < existingData.length; i++) {
            if (existingData[i][0] === k) {
-             companySheet.getRange(i + 1, 2).setValue(String(reqPayload[k] || ""));
+             companySheet.getRange(i + 1, 2).setValue(String(payload[k] || ""));
              found = true;
              break;
            }
          }
          if (!found) {
-           companySheet.appendRow([k, String(reqPayload[k] || "")]);
-           existingData.push([k, String(reqPayload[k] || "")]);
+           companySheet.appendRow([k, String(payload[k] || "")]);
+           existingData.push([k, String(payload[k] || "")]);
          }
       });
       return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
@@ -401,7 +437,13 @@ function doPost(e) {
     }
 
     if (action === "SEND_CHAT_MESSAGE") {
-      const chatSheet = ss.getSheetByName("ChatMessages");
+      let chatSheet = ss.getSheetByName("ChatMessages");
+      if (!chatSheet) {
+         chatSheet = ss.insertSheet("ChatMessages");
+         chatSheet.appendRow(["Timestamp", "Sender ID", "Sender Name", "Message Text", "Status", "Message ID"]);
+         chatSheet.getRange("A1:F1").setFontWeight("bold");
+         chatSheet.setFrozenRows(1);
+      }
       chatSheet.appendRow([
         payload.timestamp || new Date().toISOString(),
         payload.senderId || "",
@@ -414,17 +456,23 @@ function doPost(e) {
     }
 
     if (action === "FETCH_CHAT_MESSAGES") {
-      const chatSheet = ss.getSheetByName("ChatMessages");
-      const cData = chatSheet ? chatSheet.getDataRange().getValues() : [];
+      let chatSheet = ss.getSheetByName("ChatMessages");
+      if (!chatSheet) {
+         chatSheet = ss.insertSheet("ChatMessages");
+         chatSheet.appendRow(["Timestamp", "Sender ID", "Sender Name", "Message Text", "Status", "Message ID"]);
+         chatSheet.getRange("A1:F1").setFontWeight("bold");
+         chatSheet.setFrozenRows(1);
+      }
+      const cData = chatSheet.getDataRange().getValues();
       let messages = [];
       if (cData.length > 1) {
         messages = cData.slice(1).map(r => ({
-          timestamp: r[0],
-          senderId: r[1],
-          senderName: r[2],
-          messageText: r[3],
-          status: r[4] || "sent",
-          messageId: r[5]
+          timestamp: String(r[0] || ""),
+          senderId: String(r[1] || ""),
+          senderName: String(r[2] || ""),
+          messageText: String(r[3] || ""),
+          status: String(r[4] || "sent"),
+          messageId: String(r[5] || "")
         }));
       }
       return ContentService.createTextOutput(JSON.stringify({ success: true, data: { messages } })).setMimeType(ContentService.MimeType.JSON);
