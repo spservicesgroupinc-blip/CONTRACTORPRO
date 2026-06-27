@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { TimeEntry, UserProfile } from '../types';
-import { Edit2, Trash2, Plus, X, Calendar, Clock, AlertCircle, Check } from 'lucide-react';
+import { Edit2, Trash2, Plus, X, Calendar, Clock, AlertCircle, Check, Camera, Loader2, Image as ImageIcon } from 'lucide-react';
+import { compressAndEncodeBase64 } from '../photoUtils';
 
 interface TimeLogProps {
   timeEntries: TimeEntry[];
@@ -60,6 +61,40 @@ const TimeLog: React.FC<TimeLogProps> = ({
     const [clockOutVal, setClockOutVal] = useState('');
     const [isLive, setIsLive] = useState(false);
     const [formError, setFormError] = useState('');
+    const [photos, setPhotos] = useState<string[]>([]);
+    const [isUploading, setIsUploading] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setIsUploading(true);
+        setFormError('');
+        try {
+            const base64 = await compressAndEncodeBase64(file, 800);
+            const res = await fetch('/api/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    payload: {
+                        action: 'UPLOAD_PHOTO',
+                        payload: { base64, mimeType: file.type, filename: file.name }
+                    }
+                })
+            });
+            const data = await res.json();
+            if (data.success && data.data?.url) {
+                setPhotos(prev => [...prev, data.data.url]);
+            } else {
+                throw new Error(data.error || 'Failed to upload photo');
+            }
+        } catch (err: any) {
+            setFormError('Photo upload failed: ' + err.message);
+        } finally {
+            setIsUploading(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
 
     const calculateDuration = (clockIn: string, clockOut?: string): number => {
         if (!clockOut) return 0;
@@ -75,6 +110,7 @@ const TimeLog: React.FC<TimeLogProps> = ({
         setClockInVal(formatToDatetimeLocal(entry.clockIn));
         setClockOutVal(entry.clockOut ? formatToDatetimeLocal(entry.clockOut) : '');
         setIsLive(!entry.clockOut);
+        setPhotos(entry.photos || []);
         setFormError('');
         setIsModalOpen(true);
     };
@@ -90,6 +126,7 @@ const TimeLog: React.FC<TimeLogProps> = ({
         setClockInVal(formatToDatetimeLocal(oneHourAgo.toISOString()));
         setClockOutVal(formatToDatetimeLocal(now.toISOString()));
         setIsLive(false);
+        setPhotos([]);
         setFormError('');
         setIsModalOpen(true);
     };
@@ -123,6 +160,7 @@ const TimeLog: React.FC<TimeLogProps> = ({
             projectName: selectedProjectName,
             clockIn: inDate.toISOString(),
             clockOut: isLive ? undefined : (outDate ? outDate.toISOString() : undefined),
+            photos: photos,
             // Maintain locations if editing and they exist
             ...(modalMode === 'edit' && editingEntryId ? {
                 clockInLocation: timeEntries.find(e => e.id === editingEntryId)?.clockInLocation,
@@ -183,15 +221,24 @@ const TimeLog: React.FC<TimeLogProps> = ({
                                                 </span>
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-2">
                                             <button
                                                 onClick={() => handleOpenEditModal(entry)}
-                                                className="p-2 rounded-xl text-gray-400 hover:text-[#2563eb] hover:bg-blue-50 transition-all cursor-pointer"
+                                                className="p-1.5 rounded-lg text-gray-400 hover:text-[#2563eb] hover:bg-blue-50 transition-all cursor-pointer flex items-center gap-1 text-[10px] font-bold"
+                                                title="Add Photo"
+                                            >
+                                                <Camera className="w-3.5 h-3.5" />
+                                                <span className="hidden sm:inline">Photo</span>
+                                            </button>
+                                            <button
+                                                onClick={() => handleOpenEditModal(entry)}
+                                                className="p-1.5 rounded-lg text-gray-400 hover:text-[#2563eb] hover:bg-blue-50 transition-all cursor-pointer flex items-center gap-1 text-[10px] font-bold"
                                                 title="Edit Entry"
                                             >
                                                 <Edit2 className="w-3.5 h-3.5" />
+                                                <span className="hidden sm:inline">Edit</span>
                                             </button>
-                                            <div className="text-right">
+                                            <div className="text-right ml-2">
                                                 <p className="font-extrabold text-[#101726] text-lg leading-none">
                                                     {entry.clockOut ? `${duration.toFixed(2)}h` : 'LIVE'}
                                                 </p>
@@ -217,6 +264,15 @@ const TimeLog: React.FC<TimeLogProps> = ({
                                             />
                                         </div>
                                     </div>
+                                    {entry.photos && entry.photos.length > 0 && (
+                                        <div className="mt-3 pt-3 border-t border-gray-100 flex gap-2 overflow-x-auto pb-1">
+                                            {entry.photos.map((url, i) => (
+                                                <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                                                    <img src={url} alt="Log attachment" className="w-12 h-12 rounded-lg object-cover border border-gray-200" />
+                                                </a>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
@@ -316,6 +372,30 @@ const TimeLog: React.FC<TimeLogProps> = ({
                                     />
                                 </div>
                             )}
+
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex justify-between items-center">
+                                    <span>Attachments</span>
+                                </label>
+                                <div className="flex gap-2 items-start flex-wrap bg-gray-50 p-3 rounded-xl border border-gray-200">
+                                    {photos.map((url, i) => (
+                                        <div key={i} className="relative group">
+                                            <img src={url} alt="Attachment" className="w-14 h-14 object-cover rounded-lg border border-gray-300" />
+                                            <button
+                                                type="button"
+                                                onClick={() => setPhotos(photos.filter((_, idx) => idx !== i))}
+                                                className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center shadow hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            >
+                                                <X className="w-3 h-3" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    <label className={`w-14 h-14 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center text-gray-400 hover:border-[#2563eb] hover:text-[#2563eb] transition-colors cursor-pointer ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                                        <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handlePhotoUpload} />
+                                        {isUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5" />}
+                                    </label>
+                                </div>
+                            </div>
 
                             <div className="pt-4 flex gap-3 shrink-0">
                                 {modalMode === 'edit' && (

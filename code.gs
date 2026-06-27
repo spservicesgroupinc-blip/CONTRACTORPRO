@@ -32,8 +32,8 @@ function setup() {
   let timeSheet = ss.getSheetByName("TimeEntries");
   if (!timeSheet) {
     timeSheet = ss.insertSheet("TimeEntries");
-    timeSheet.appendRow(["Entry ID", "Profile ID", "Project Name", "Clock In Time", "Clock Out Time", "Clock In Lat", "Clock In Lng", "Clock Out Lat", "Clock Out Lng"]);
-    timeSheet.getRange("A1:I1").setFontWeight("bold");
+    timeSheet.appendRow(["Entry ID", "Profile ID", "Project Name", "Clock In Time", "Clock Out Time", "Clock In Lat", "Clock In Lng", "Clock Out Lat", "Clock Out Lng", "Photos"]);
+    timeSheet.getRange("A1:J1").setFontWeight("bold");
     timeSheet.setFrozenRows(1);
   }
 
@@ -95,6 +95,28 @@ function doPost(e) {
     const payload = data.payload;
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     
+    if (action === "UPLOAD_PHOTO") {
+      const base64Data = payload.base64;
+      const mimeType = payload.mimeType || "image/jpeg";
+      const filename = payload.filename || "photo_" + new Date().getTime() + ".jpg";
+      
+      const blob = Utilities.newBlob(Utilities.base64Decode(base64Data.split(',')[1] || base64Data), mimeType, filename);
+      let folder;
+      const folders = DriveApp.getFoldersByName("ProContractor Photos");
+      if (folders.hasNext()) {
+        folder = folders.next();
+      } else {
+        folder = DriveApp.createFolder("ProContractor Photos");
+        folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      }
+      
+      const file = folder.createFile(blob);
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      const url = file.getDownloadUrl(); // Could also be getUrl() to view in browser, but getDownloadUrl() gives direct access if needed, or getUrl for safe preview. Let's return both.
+      
+      return ContentService.createTextOutput(JSON.stringify({ success: true, data: { url: file.getUrl(), downloadUrl: url } })).setMimeType(ContentService.MimeType.JSON);
+    }
+    
     if (action === "EDIT_TIME_ENTRY") {
       const timeSheet = ss.getSheetByName("TimeEntries");
       const existingData = timeSheet.getDataRange().getValues();
@@ -107,8 +129,13 @@ function doPost(e) {
            timeSheet.getRange(i + 1, 3).setValue(updatedEntry.projectName || "");
            timeSheet.getRange(i + 1, 4).setValue(updatedEntry.clockIn || "");
            timeSheet.getRange(i + 1, 5).setValue(updatedEntry.clockOut || "");
-           timeSheet.getRange(i + 1, 6).setValue(updatedEntry.clockInLocation ? JSON.stringify(updatedEntry.clockInLocation) : "");
-           timeSheet.getRange(i + 1, 7).setValue(updatedEntry.clockOutLocation ? JSON.stringify(updatedEntry.clockOutLocation) : "");
+           timeSheet.getRange(i + 1, 6).setValue(updatedEntry.clockInLocation?.latitude || "");
+           timeSheet.getRange(i + 1, 7).setValue(updatedEntry.clockInLocation?.longitude || "");
+           timeSheet.getRange(i + 1, 8).setValue(updatedEntry.clockOutLocation?.latitude || "");
+           timeSheet.getRange(i + 1, 9).setValue(updatedEntry.clockOutLocation?.longitude || "");
+           if (updatedEntry.photos) {
+             timeSheet.getRange(i + 1, 10).setValue(JSON.stringify(updatedEntry.photos));
+           }
            return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
         }
       }
@@ -164,6 +191,7 @@ function doPost(e) {
             timeSheet.getRange(rowIndex, 7).setValue(entry.clockInLocation?.longitude || "");
             timeSheet.getRange(rowIndex, 8).setValue(entry.clockOutLocation?.latitude || "");
             timeSheet.getRange(rowIndex, 9).setValue(entry.clockOutLocation?.longitude || "");
+            timeSheet.getRange(rowIndex, 10).setValue(entry.photos ? JSON.stringify(entry.photos) : "[]");
             
             existingIdsInPayload.add(rowId);
           }
@@ -191,7 +219,8 @@ function doPost(e) {
               entry.clockInLocation?.latitude || "",
               entry.clockInLocation?.longitude || "",
               entry.clockOutLocation?.latitude || "",
-              entry.clockOutLocation?.longitude || ""
+              entry.clockOutLocation?.longitude || "",
+              entry.photos ? JSON.stringify(entry.photos) : "[]"
             ]);
           }
         }
@@ -247,7 +276,8 @@ function doPost(e) {
              clockIn: r[3],
              clockOut: r[4],
              clockInLocation: r[5] ? { latitude: r[5], longitude: r[6] } : null,
-             clockOutLocation: r[7] ? { latitude: r[7], longitude: r[8] } : null
+             clockOutLocation: r[7] ? { latitude: r[7], longitude: r[8] } : null,
+             photos: r[9] ? JSON.parse(r[9]) : []
           }));
       }
 
@@ -354,7 +384,8 @@ function doPost(e) {
                clockIn: r[3],
                clockOut: r[4],
                clockInLocation: r[5] ? { latitude: r[5], longitude: r[6] } : null,
-               clockOutLocation: r[7] ? { latitude: r[7], longitude: r[8] } : null
+               clockOutLocation: r[7] ? { latitude: r[7], longitude: r[8] } : null,
+               photos: r[9] ? JSON.parse(r[9]) : []
             }));
       }
       return ContentService.createTextOutput(JSON.stringify({ success: true, data: { entries } })).setMimeType(ContentService.MimeType.JSON);
@@ -365,6 +396,33 @@ function doPost(e) {
       const id = payload.id;
       usersSheet.appendRow([id, payload.name, payload.hourlyWage, "Employee", new Date().toISOString()]);
       return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === "EDIT_EMPLOYEE") {
+      const usersSheet = ss.getSheetByName("Users");
+      const existingData = usersSheet.getDataRange().getValues();
+      const id = payload.id;
+      for (let i = 1; i < existingData.length; i++) {
+        if (existingData[i][0] === id) {
+          usersSheet.getRange(i + 1, 2).setValue(payload.name);
+          usersSheet.getRange(i + 1, 3).setValue(payload.hourlyWage);
+          return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: false, error: "Employee not found" })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === "DELETE_EMPLOYEE") {
+      const usersSheet = ss.getSheetByName("Users");
+      const existingData = usersSheet.getDataRange().getValues();
+      const id = payload.id;
+      for (let i = 1; i < existingData.length; i++) {
+        if (existingData[i][0] === id) {
+          usersSheet.deleteRow(i + 1);
+          return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: false, error: "Employee not found" })).setMimeType(ContentService.MimeType.JSON);
     }
     
     if (action === "SAVE_INVOICE") {

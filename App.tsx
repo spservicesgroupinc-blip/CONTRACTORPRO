@@ -72,6 +72,38 @@ const App: React.FC = () => {
     const [quickTaskTitle, setQuickTaskTitle] = useState('');
     const [quickTaskPriority, setQuickTaskPriority] = useState<'high' | 'medium' | 'low'>('medium');
     const [quickTaskCategory, setQuickTaskCategory] = useState('General');
+    const [quickTaskPhotos, setQuickTaskPhotos] = useState<string[]>([]);
+    const [isUploadingTaskPhoto, setIsUploadingTaskPhoto] = useState(false);
+    const taskFileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleUploadTaskPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setIsUploadingTaskPhoto(true);
+        try {
+            const { compressAndEncodeBase64 } = await import('./photoUtils');
+            const base64 = await compressAndEncodeBase64(file, 800);
+            const res = await fetch('/api/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    payload: {
+                        action: 'UPLOAD_PHOTO',
+                        payload: { base64, mimeType: file.type, filename: file.name }
+                    }
+                })
+            });
+            const data = await res.json();
+            if (data.success && data.data?.url) {
+                setQuickTaskPhotos(prev => [...prev, data.data.url]);
+            }
+        } catch (err: any) {
+            console.error('Task photo upload failed:', err);
+        } finally {
+            setIsUploadingTaskPhoto(false);
+            if (taskFileInputRef.current) taskFileInputRef.current.value = '';
+        }
+    };
 
     // Filter tasks state
     const [selectedTaskProjectFilter, setSelectedTaskProjectFilter] = useState('All');
@@ -311,11 +343,13 @@ const App: React.FC = () => {
             completed: false,
             priority: quickTaskPriority,
             category: quickTaskCategory || 'General',
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            photos: quickTaskPhotos
         };
 
         setTasks(prev => [...prev, newTask]);
         setQuickTaskTitle('');
+        setQuickTaskPhotos([]);
         setIsNewTaskPopupOpen(false);
         setSelectedTaskProjectFilter(selectedProject || 'General');
         setCurrentTab('tasks');
@@ -970,15 +1004,51 @@ const App: React.FC = () => {
                                                             @{t.projectId}
                                                         </span>
                                                     </div>
+                                                    {t.photos && t.photos.length > 0 && (
+                                                        <div className="flex gap-1.5 mt-2 overflow-x-auto pb-1">
+                                                            {t.photos.map((url, i) => (
+                                                                <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                                                                    <img src={url} alt="Task photo" className="w-8 h-8 rounded object-cover border border-gray-200" />
+                                                                </a>
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                             
-                                            <button 
-                                                onClick={() => setTasks(tasks.filter(task => task.id !== t.id))}
-                                                className="text-gray-300 hover:text-red-500 p-1 rounded-full hover:bg-gray-50 transition-colors shrink-0"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
+                                            <div className="flex flex-col gap-1 items-center justify-center shrink-0">
+                                                <label className="text-gray-300 hover:text-[#2563eb] p-1 rounded-full hover:bg-blue-50 transition-colors cursor-pointer title='Add Photo'">
+                                                    <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                                                        const file = e.target.files?.[0];
+                                                        if (!file) return;
+                                                        try {
+                                                            const { compressAndEncodeBase64 } = await import('./photoUtils');
+                                                            const base64 = await compressAndEncodeBase64(file, 800);
+                                                            const res = await fetch('/api/sync', {
+                                                                method: 'POST',
+                                                                headers: { 'Content-Type': 'application/json' },
+                                                                body: JSON.stringify({
+                                                                    payload: { action: 'UPLOAD_PHOTO', payload: { base64, mimeType: file.type, filename: file.name } }
+                                                                })
+                                                            });
+                                                            const data = await res.json();
+                                                            if (data.success && data.data?.url) {
+                                                                setTasks(tasks.map(task => task.id === t.id ? { ...task, photos: [...(task.photos || []), data.data.url] } : task));
+                                                            }
+                                                        } catch (err) {
+                                                            console.error('Task photo upload failed:', err);
+                                                        }
+                                                    }} />
+                                                    <Camera className="w-4 h-4" />
+                                                </label>
+                                                <button 
+                                                    onClick={() => setTasks(tasks.filter(task => task.id !== t.id))}
+                                                    className="text-gray-300 hover:text-red-500 p-1 rounded-full hover:bg-red-50 transition-colors shrink-0"
+                                                    title="Delete Task"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
                                         </li>
                                     ))}
                                 </ul>
@@ -1620,6 +1690,30 @@ const App: React.FC = () => {
                                         placeholder="E.g., Plumbing, Electrical, Drywall"
                                         className="w-full px-3 py-2 bg-gray-50 border border-gray-205 rounded-lg text-xs font-bold text-gray-700 outline-none"
                                     />
+                                </div>
+
+                                <div>
+                                    <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">
+                                        Photos & Attachments
+                                    </label>
+                                    <div className="flex gap-2 items-start flex-wrap bg-gray-50 p-2 rounded-xl border border-gray-200">
+                                        {quickTaskPhotos.map((url, i) => (
+                                            <div key={i} className="relative group">
+                                                <img src={url} alt="Attachment" className="w-12 h-12 object-cover rounded-lg border border-gray-300" />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setQuickTaskPhotos(quickTaskPhotos.filter((_, idx) => idx !== i))}
+                                                    className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center shadow hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                >
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                        <label className={`w-12 h-12 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center text-gray-400 hover:border-[#2563eb] hover:text-[#2563eb] transition-colors cursor-pointer ${isUploadingTaskPhoto ? 'opacity-50 pointer-events-none' : ''}`}>
+                                            <input type="file" accept="image/*" className="hidden" ref={taskFileInputRef} onChange={handleUploadTaskPhoto} />
+                                            {isUploadingTaskPhoto ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+                                        </label>
+                                    </div>
                                 </div>
 
                                 <button 

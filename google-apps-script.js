@@ -14,8 +14,8 @@ function setup() {
   let timeSheet = ss.getSheetByName("TimeEntries");
   if (!timeSheet) {
     timeSheet = ss.insertSheet("TimeEntries");
-    timeSheet.appendRow(["Entry ID", "Profile ID", "Project Name", "Clock In Time", "Clock Out Time", "Clock In Lat", "Clock In Lng", "Clock Out Lat", "Clock Out Lng"]);
-    timeSheet.getRange("A1:I1").setFontWeight("bold");
+    timeSheet.appendRow(["Entry ID", "Profile ID", "Project Name", "Clock In Time", "Clock Out Time", "Clock In Lat", "Clock In Lng", "Clock Out Lat", "Clock Out Lng", "Photos"]);
+    timeSheet.getRange("A1:J1").setFontWeight("bold");
     timeSheet.setFrozenRows(1);
   }
 
@@ -76,6 +76,28 @@ function doPost(e) {
     const action = data.action;
     const payload = data.payload;
     const ss = SpreadsheetApp.getActiveSpreadsheet();
+    
+    if (action === "UPLOAD_PHOTO") {
+      const base64Data = payload.base64;
+      const mimeType = payload.mimeType || "image/jpeg";
+      const filename = payload.filename || "photo_" + new Date().getTime() + ".jpg";
+      
+      const blob = Utilities.newBlob(Utilities.base64Decode(base64Data.split(',')[1] || base64Data), mimeType, filename);
+      let folder;
+      const folders = DriveApp.getFoldersByName("ProContractor Photos");
+      if (folders.hasNext()) {
+        folder = folders.next();
+      } else {
+        folder = DriveApp.createFolder("ProContractor Photos");
+        folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      }
+      
+      const file = folder.createFile(blob);
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      const url = file.getDownloadUrl();
+      
+      return ContentService.createTextOutput(JSON.stringify({ success: true, data: { url: file.getUrl(), downloadUrl: url } })).setMimeType(ContentService.MimeType.JSON);
+    }
     
     if (action === "EDIT_TIME_ENTRY") {
       const timeSheet = ss.getSheetByName("TimeEntries");
@@ -347,6 +369,33 @@ function doPost(e) {
       const id = payload.id;
       usersSheet.appendRow([id, payload.name, payload.hourlyWage, "Employee", new Date().toISOString()]);
       return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === "EDIT_EMPLOYEE") {
+      const usersSheet = ss.getSheetByName("Users");
+      const existingData = usersSheet.getDataRange().getValues();
+      const id = payload.id;
+      for (let i = 1; i < existingData.length; i++) {
+        if (existingData[i][0] === id) {
+          usersSheet.getRange(i + 1, 2).setValue(payload.name);
+          usersSheet.getRange(i + 1, 3).setValue(payload.hourlyWage);
+          return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: false, error: "Employee not found" })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === "DELETE_EMPLOYEE") {
+      const usersSheet = ss.getSheetByName("Users");
+      const existingData = usersSheet.getDataRange().getValues();
+      const id = payload.id;
+      for (let i = 1; i < existingData.length; i++) {
+        if (existingData[i][0] === id) {
+          usersSheet.deleteRow(i + 1);
+          return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: false, error: "Employee not found" })).setMimeType(ContentService.MimeType.JSON);
     }
     
     if (action === "SAVE_INVOICE") {

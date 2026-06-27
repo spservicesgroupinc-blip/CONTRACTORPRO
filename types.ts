@@ -36,6 +36,7 @@ export interface TimeEntry {
   clockInLocation?: Coordinates;
   clockOut?: string; // ISO string
   clockOutLocation?: Coordinates;
+  photos?: string[];
 }
 
 export interface UserProfile {
@@ -68,6 +69,7 @@ export interface Task {
   priority: 'high' | 'medium' | 'low';
   category?: string;
   createdAt: string;
+  photos?: string[];
 }
 
 
