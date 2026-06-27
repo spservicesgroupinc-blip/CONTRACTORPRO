@@ -867,10 +867,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                                     <p className="text-slate-400 text-sm font-semibold">No employees currently clocked in.</p>
                                 </div>
                             ) : (
-                                adminData?.entries.filter(e => !e.clockOut).map(e => {
+                                adminData?.entries.filter(e => !e.clockOut).map((e, idx) => {
                                     const user = adminData.users.find(u => u.id === e.profileId);
                                     return (
-                                        <div key={e.id} className="p-4 bg-slate-50 border border-slate-150 rounded-xl flex items-center justify-between hover:border-blue-250 transition-all">
+                                        <div key={`${e.id || 'active'}_${idx}`} className="p-4 bg-slate-50 border border-slate-150 rounded-xl flex items-center justify-between hover:border-blue-250 transition-all">
                                             <div>
                                                 <p className="font-bold text-[14px] text-slate-800">{user?.name || 'Unknown User'}</p>
                                                 <p className="text-xs text-slate-500 mt-1.5 flex items-center gap-1">
@@ -1489,14 +1489,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                                             {adminData?.entries.filter(e => e.clockOut).length === 0 ? (
                                                 <p className="text-[11px] text-slate-450 font-semibold text-center py-4">No completed hours logs stored.</p>
                                             ) : (
-                                                adminData?.entries.filter(e => e.clockOut).map(e => {
+                                                adminData?.entries.filter(e => e.clockOut).map((e, idx) => {
                                                     const u = adminData?.users.find(u => u.id === e.profileId);
                                                     const dur = (new Date(e.clockOut || Date.now()).getTime() - new Date(e.clockIn).getTime()) / 3600000;
                                                     const cost = Math.max(0, dur) * (u ? parseFloat(u.hourlyWage) : 0);
                                                     const selected = invoiceSelectedEntries.has(e.id);
                                                     return (
                                                         <div 
-                                                            key={e.id} 
+                                                            key={`${e.id || 'completed'}_${idx}`} 
                                                             onClick={() => {
                                                                 const next = new Set(invoiceSelectedEntries);
                                                                 if (selected) next.delete(e.id); else next.add(e.id);

@@ -37,6 +37,7 @@ export interface TimeEntry {
   clockInLocation?: Coordinates;
   clockOut?: string; // ISO string
   clockOutLocation?: Coordinates;
+  breaks?: { start: string; end?: string }[];
   photos?: string[];
 }
 

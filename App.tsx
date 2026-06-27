@@ -12,6 +12,20 @@ import Sidebar from './components/Sidebar';
 import { chatService } from './services/chatService';
 import { Clock, FileText, DollarSign, LayoutGrid, User, CalendarDays, Square, Trash2, Plus, CheckCircle2, Wallet, LogOut, ShieldAlert, MessageSquare, Mic, MicOff, Sparkles, Loader2, Briefcase, Tag, AlertCircle, X, Check, StopCircle, ChevronRight, Camera } from 'lucide-react';
 
+export const getEntryDuration = (entry: TimeEntry, fallbackTimeMs: number) => {
+    const inTime = new Date(entry.clockIn).getTime();
+    const outTime = entry.clockOut ? new Date(entry.clockOut).getTime() : fallbackTimeMs;
+    let breakTimeMs = 0;
+    if (entry.breaks) {
+        entry.breaks.forEach(b => {
+            const bStart = new Date(b.start).getTime();
+            const bEnd = b.end ? new Date(b.end).getTime() : fallbackTimeMs;
+            breakTimeMs += (bEnd - bStart);
+        });
+    }
+    return Math.max(0, ((outTime - inTime) - breakTimeMs) / (1000 * 60 * 60));
+};
+
 const App: React.FC = () => {
     const [profile, setProfile] = useState<UserProfile | null>(() => {
         try {
@@ -507,6 +521,14 @@ const App: React.FC = () => {
         return !!lastEntry && !lastEntry.clockOut;
     }, [timeEntries]);
 
+    const isOnBreak = useMemo(() => {
+        if (!isClockedIn) return false;
+        const lastEntry = timeEntries[timeEntries.length - 1];
+        if (!lastEntry || !lastEntry.breaks) return false;
+        const lastBreak = lastEntry.breaks[lastEntry.breaks.length - 1];
+        return lastBreak && !lastBreak.end;
+    }, [isClockedIn, timeEntries]);
+
     // Paylog Filtering logic
     const filteredPaylogEntries = useMemo(() => {
         let filtered = [...timeEntries];
@@ -543,9 +565,7 @@ const App: React.FC = () => {
     const paylogTotals = useMemo(() => {
         let hours = 0;
         filteredPaylogEntries.forEach(entry => {
-            const inTime = new Date(entry.clockIn).getTime();
-            const outTime = entry.clockOut ? new Date(entry.clockOut).getTime() : now.getTime();
-            hours += (outTime - inTime) / (1000 * 60 * 60);
+            hours += getEntryDuration(entry, now.getTime());
         });
         return {
             hours,
@@ -563,11 +583,7 @@ const App: React.FC = () => {
         timeEntries.forEach(entry => {
             const inTime = new Date(entry.clockIn);
             if (inTime >= startOfWeek) {
-                if (entry.clockOut) {
-                    hours += (new Date(entry.clockOut).getTime() - inTime.getTime()) / (1000*60*60);
-                } else {
-                    hours += (now.getTime() - inTime.getTime()) / (1000*60*60);
-                }
+                hours += getEntryDuration(entry, now.getTime());
             }
         });
         
@@ -576,6 +592,36 @@ const App: React.FC = () => {
             weeklyEarnings: hours * (profile?.hourlyWage || 0)
         };
     }, [timeEntries, now, profile]);
+
+    const handleBreakToggle = async () => {
+        if (!isClockedIn) return;
+        setIsLoading(true);
+        try {
+            const lastEntry = timeEntries[timeEntries.length - 1];
+            const currentBreaks = lastEntry.breaks ? [...lastEntry.breaks] : [];
+            const updatedEntry: TimeEntry = { ...lastEntry };
+            
+            if (isOnBreak) {
+                currentBreaks[currentBreaks.length - 1] = {
+                    ...currentBreaks[currentBreaks.length - 1],
+                    end: new Date().toISOString()
+                };
+            } else {
+                currentBreaks.push({ start: new Date().toISOString() });
+            }
+            updatedEntry.breaks = currentBreaks;
+            
+            const updatedEntries = [
+                ...timeEntries.slice(0, timeEntries.length - 1),
+                updatedEntry
+            ];
+            setTimeEntries(updatedEntries);
+        } catch(err) {
+            console.error('Break toggle error', err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     const handleClockToggle = async () => {
         setIsLoading(true);
@@ -788,8 +834,8 @@ const App: React.FC = () => {
                     <div className="bg-white rounded-b-[40px] shadow-sm pb-10 flex flex-col items-center relative">
                        <div className="w-full px-6 py-5 flex justify-between items-center">
                            <div className="flex-1 text-center mt-2">
-                               <span className="text-gray-400/80 font-bold tracking-widest text-sm">
-                                   {isClockedIn ? 'ON THE CLOCK' : 'READY TO WORK'}
+                               <span className={`font-bold tracking-widest text-sm ${isOnBreak ? 'text-amber-500' : 'text-gray-400/80'}`}>
+                                   {isOnBreak ? 'ON BREAK' : (isClockedIn ? 'ON THE CLOCK' : 'READY TO WORK')}
                                </span>
                            </div>
                            <div className="absolute right-5 top-5">
@@ -801,7 +847,7 @@ const App: React.FC = () => {
                        </div>
                        
                        {/* Centered large button area */}
-                       <div className="mt-2 mb-6">
+                       <div className="mt-2 mb-6 flex flex-col items-center">
                            <button
                                onClick={handleClockToggle}
                                disabled={isLoading}
@@ -825,6 +871,28 @@ const App: React.FC = () => {
                                    {isLoading && <span className="absolute bottom-6 text-xs font-semibold opacity-60">Wait...</span>}
                                </div>
                            </button>
+
+                           {isClockedIn && (
+                               <button 
+                                  onClick={handleBreakToggle}
+                                  disabled={isLoading}
+                                  className={`mt-8 px-8 py-3 rounded-2xl font-extrabold text-sm transition-all shadow-sm flex items-center gap-2 ${
+                                     isOnBreak 
+                                     ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 ring-2 ring-amber-500/20' 
+                                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
+                                  }`}
+                               >
+                                   {isOnBreak ? (
+                                       <>
+                                           <Clock className="w-4 h-4 animate-pulse" /> End Break
+                                       </>
+                                   ) : (
+                                       <>
+                                           ☕ Take Break
+                                       </>
+                                   )}
+                               </button>
+                           )}
                        </div>
 
                        {/* Job Selection Dropdown */}
@@ -906,8 +974,8 @@ const App: React.FC = () => {
                             <div className="p-8 flex justify-center items-center">
                                 {timeEntries.length > 0 ? (
                                     <ul className="w-full space-y-4">
-                                        {timeEntries.slice(-3).reverse().map(entry => (
-                                            <li key={entry.id} className="flex justify-between items-center border-b border-gray-50 pb-2 last:border-0 last:pb-0">
+                                        {timeEntries.slice(-3).reverse().map((entry, idx) => (
+                                            <li key={`${entry.id || 'recent'}_${idx}`} className="flex justify-between items-center border-b border-gray-50 pb-2 last:border-0 last:pb-0">
                                                 <div className="flex flex-col">
                                                     <span className="text-sm font-semibold text-gray-700">{new Date(entry.clockIn).toLocaleDateString()}</span>
                                                     <span className="text-xs text-gray-400">
@@ -917,7 +985,7 @@ const App: React.FC = () => {
                                                 </div>
                                                 <div className="text-sm font-bold text-gray-600">
                                                     {entry.clockOut 
-                                                        ? (((new Date(entry.clockOut).getTime() - new Date(entry.clockIn).getTime()) / (1000*60*60)).toFixed(2) + 'h')
+                                                        ? (getEntryDuration(entry, now.getTime()).toFixed(2) + 'h')
                                                         : '...'}
                                                 </div>
                                             </li>

@@ -96,11 +96,19 @@ const TimeLog: React.FC<TimeLogProps> = ({
         }
     };
 
-    const calculateDuration = (clockIn: string, clockOut?: string): number => {
-        if (!clockOut) return 0;
-        const start = new Date(clockIn).getTime();
-        const end = new Date(clockOut).getTime();
-        return Math.max(0, (end - start) / (1000 * 60 * 60)); // duration in hours
+    const calculateDuration = (entry: TimeEntry): number => {
+        if (!entry.clockOut) return 0;
+        const start = new Date(entry.clockIn).getTime();
+        const end = new Date(entry.clockOut).getTime();
+        let breakTimeMs = 0;
+        if (entry.breaks) {
+            entry.breaks.forEach(b => {
+                const bStart = new Date(b.start).getTime();
+                const bEnd = b.end ? new Date(b.end).getTime() : end;
+                breakTimeMs += (bEnd - bStart);
+            });
+        }
+        return Math.max(0, ((end - start) - breakTimeMs) / (1000 * 60 * 60));
     };
 
     const handleOpenEditModal = (entry: TimeEntry) => {
@@ -155,16 +163,19 @@ const TimeLog: React.FC<TimeLogProps> = ({
             }
         }
         
+        const existingEntry = modalMode === 'edit' && editingEntryId ? timeEntries.find(e => e.id === editingEntryId) : null;
+
         const entryData: TimeEntry = {
             id: modalMode === 'edit' && editingEntryId ? editingEntryId : `entry_${Date.now()}`,
             projectName: selectedProjectName,
             clockIn: inDate.toISOString(),
             clockOut: isLive ? undefined : (outDate ? outDate.toISOString() : undefined),
             photos: photos,
-            // Maintain locations if editing and they exist
-            ...(modalMode === 'edit' && editingEntryId ? {
-                clockInLocation: timeEntries.find(e => e.id === editingEntryId)?.clockInLocation,
-                clockOutLocation: timeEntries.find(e => e.id === editingEntryId)?.clockOutLocation,
+            // Maintain locations and breaks if editing and they exist
+            ...(existingEntry ? {
+                clockInLocation: existingEntry.clockInLocation,
+                clockOutLocation: existingEntry.clockOutLocation,
+                breaks: existingEntry.breaks,
             } : {})
         };
         
@@ -205,11 +216,11 @@ const TimeLog: React.FC<TimeLogProps> = ({
             <div className="p-5">
                 {sortedEntries.length > 0 ? (
                     <div className="space-y-4">
-                        {sortedEntries.map((entry) => {
-                            const duration = calculateDuration(entry.clockIn, entry.clockOut);
+                        {sortedEntries.map((entry, idx) => {
+                            const duration = calculateDuration(entry);
                             const pay = duration * profile.hourlyWage;
                             return (
-                                <div key={entry.id} className="p-5 border border-gray-100 bg-white rounded-2xl shadow-sm flex flex-col relative group hover:border-gray-200 transition-all">
+                                <div key={`${entry.id || 'entry'}_${idx}`} className="p-5 border border-gray-100 bg-white rounded-2xl shadow-sm flex flex-col relative group hover:border-gray-200 transition-all">
                                     <div className="flex items-start justify-between mb-4 pb-3 border-b border-gray-100">
                                         <div className="flex flex-col gap-1">
                                             <p className="font-bold text-gray-800 text-sm">
@@ -264,6 +275,14 @@ const TimeLog: React.FC<TimeLogProps> = ({
                                             />
                                         </div>
                                     </div>
+                                    
+                                    {entry.breaks && entry.breaks.length > 0 && (
+                                        <div className="mt-2 text-xs font-semibold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-100 flex items-center gap-1.5 w-fit">
+                                            <Clock className="w-3.5 h-3.5" />
+                                            {entry.breaks.length} Break(s) taken
+                                        </div>
+                                    )}
+
                                     {entry.photos && entry.photos.length > 0 && (
                                         <div className="mt-3 pt-3 border-t border-gray-100 flex gap-2 overflow-x-auto pb-1">
                                             {entry.photos.map((url, i) => (
