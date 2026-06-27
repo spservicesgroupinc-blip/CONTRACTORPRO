@@ -1,25 +1,19 @@
-const CACHE_NAME = 'geotime-cache-v5';
-const STATIC_CACHE = 'geotime-static-v5';
-const DYNAMIC_CACHE = 'geotime-dynamic-v5';
-
-const STATIC_ASSETS = [
+const CACHE_NAME = 'geotime-cache-v4';
+const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/pwa-icon.svg',
   '/manifest.json'
 ];
 
-// Cache size limit
-const CACHE_LIMIT = 50;
-
 // Install Service Worker and cache essential shells
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
-    caches.open(STATIC_CACHE).then((cache) => {
-      console.log('[Service Worker] Pre-caching static assets');
-      return cache.addAll(STATIC_ASSETS).catch(err => {
-        console.warn('[Service Worker] Pre-caching skipped some files:', err);
+    caches.open(CACHE_NAME).then((cache) => {
+      console.log('[Service Worker] Pre-caching offline shell');
+      return cache.addAll(ASSETS_TO_CACHE).catch(err => {
+        console.warn('[Service Worker] Pre-caching skipped some files, proceeding securely', err);
       });
     })
   );
@@ -31,8 +25,8 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cache) => {
-          if (cache !== STATIC_CACHE && cache !== DYNAMIC_CACHE && cache !== CACHE_NAME) {
-            console.log('[Service Worker] Clearing old cache:', cache);
+          if (cache !== CACHE_NAME) {
+            console.log('[Service Worker] Clearing old cache registry:', cache);
             return caches.delete(cache);
           }
         })
@@ -41,124 +35,62 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Trim cache to size limit
-async function trimCache(cacheName, maxItems) {
-  const cache = await caches.open(cacheName);
-  const keys = await cache.keys();
-  if (keys.length > maxItems) {
-    await cache.delete(keys[0]);
-    await trimCache(cacheName, maxItems);
-  }
-}
-
-// Fetch interception with optimized strategies
+// Fetch interception
 self.addEventListener('fetch', (event) => {
   const requestUrl = new URL(event.request.url);
-  const isNavigation = event.request.mode === 'navigate';
 
-  // Skip non-GET requests
-  if (event.request.method !== 'GET') {
-    return;
-  }
-
-  // Network-first for API calls (real-time data)
-  if (requestUrl.pathname.startsWith('/api/')) {
+  // Skip intercepting API and remote fetch routes (e.g., Google Sheets / GAS proxy server) 
+  // to ensure real-time clock syncing is never served with stale caches
+  if (requestUrl.pathname.startsWith('/api/') || requestUrl.host.includes('googleapis.com') || requestUrl.host.includes('google.com')) {
     event.respondWith(
-      fetch(event.request)
-        .then(response => {
-          // Clone successful responses for cache
-          if (response.ok) {
-            const responseClone = response.clone();
-            caches.open(DYNAMIC_CACHE).then(cache => cache.put(event.request, responseClone));
-          }
-          return response;
-        })
-        .catch(() => {
-          // Return cached API response if available, otherwise offline message
-          return caches.match(event.request).then(cached => {
-            if (cached) return cached;
-            return new Response(
-              JSON.stringify({ 
-                success: false, 
-                error: "OFFLINE", 
-                message: "You are offline. Your punches are saved locally and will auto-sync when you regain connection." 
-              }), 
-              { headers: { 'Content-Type': 'application/json' } }
-            );
-          });
-        })
-    );
-    return;
-  }
-
-  // Skip external domains (fonts, CDN)
-  if (requestUrl.host.includes('googleapis.com') || 
-      requestUrl.host.includes('google.com') || 
-      requestUrl.host.includes('tailwindcss.com')) {
-    event.respondWith(fetch(event.request));
-    return;
-  }
-
-  // Cache-first for static assets
-  if (STATIC_ASSETS.some(asset => requestUrl.pathname.endsWith(asset))) {
-    event.respondWith(
-      caches.match(event.request).then(cached => {
-        if (cached) {
-          // Update cache in background
-          fetch(event.request).then(response => {
-            if (response.ok) {
-              caches.open(STATIC_CACHE).then(cache => cache.put(event.request, response));
-            }
-          }).catch(() => {});
-          return cached;
-        }
-        return fetch(event.request);
+      fetch(event.request).catch(() => {
+        // Handle API failures gracefully when offline
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: "OFFLINE", 
+            message: "You are offline. Your punches are saved locally and will auto-sync when you regain connection." 
+          }), 
+          { headers: { 'Content-Type': 'application/json' } }
+        );
       })
     );
     return;
   }
 
-  // Stale-while-revalidate for app shell and assets
+  // Stale-While-Revalidate for application assets, layouts, and libraries
   event.respondWith(
-    caches.match(event.request).then(cachedResponse => {
-      const fetchPromise = fetch(event.request).then(networkResponse => {
-        if (networkResponse && networkResponse.ok) {
-          const responseClone = networkResponse.clone();
-          caches.open(DYNAMIC_CACHE).then(cache => {
-            cache.put(event.request, responseClone);
-            trimCache(DYNAMIC_CACHE, CACHE_LIMIT);
-          });
-        }
-        return networkResponse;
-      }).catch(() => null);
-
-      // Return cached immediately, update in background
+    caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
+        // Spawn standard network request in background to refresh cache silently
+        fetch(event.request).then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse));
+          }
+        }).catch(() => { /* ignore backgrounds fetch errors if offline */ });
+        
         return cachedResponse;
       }
       
-      return fetchPromise.then(response => {
-        if (!response && isNavigation) {
+      // Fallback directly to network
+      return fetch(event.request).then((response) => {
+        // Cache dynamic assets (like cdn script imports and sub pages) on the fly
+        if (!response || response.status !== 200 || (response.type !== 'basic' && response.type !== 'cors')) {
+          return response;
+        }
+        
+        const responseToCache = response.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, responseToCache);
+        });
+        
+        return response;
+      }).catch(() => {
+        // Safe offline layout fallback for main screen navigation if they aren't connected
+        if (event.request.mode === 'navigate') {
           return caches.match('/');
         }
-        return response;
       });
     })
   );
-});
-
-// Handle messages from main thread
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
-  if (event.data && event.data.type === 'CLEAR_CACHE') {
-    caches.keys().then(names => {
-      names.forEach(name => {
-        if (name !== STATIC_CACHE) {
-          caches.delete(name);
-        }
-      });
-    });
-  }
 });
