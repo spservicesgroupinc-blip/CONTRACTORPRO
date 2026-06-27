@@ -1,8 +1,7 @@
-const CACHE_NAME = 'geotime-cache-v2';
+const CACHE_NAME = 'geotime-cache-v4';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
-  '/index.css',
   '/pwa-icon.svg',
   '/manifest.json'
 ];
@@ -76,7 +75,7 @@ self.addEventListener('fetch', (event) => {
       // Fallback directly to network
       return fetch(event.request).then((response) => {
         // Cache dynamic assets (like cdn script imports and sub pages) on the fly
-        if (!response || response.status !== 200 || response.type !== 'basic' && !event.request.url.startsWith('https://aistudiocdn.com')) {
+        if (!response || response.status !== 200 || (response.type !== 'basic' && response.type !== 'cors')) {
           return response;
         }
         

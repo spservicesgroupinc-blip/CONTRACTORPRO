@@ -185,7 +185,7 @@ class ChatService {
     }
   }
 
-  private updateMessageStatus(messageId: string, status: 'sent' | 'failed') {
+  private updateMessageStatus(messageId: string, status: 'pending' | 'sent' | 'failed') {
     const idx = this.messages.findIndex(m => m.messageId === messageId);
     if (idx !== -1) {
       this.messages[idx] = {
@@ -293,7 +293,6 @@ class ChatService {
           body: msg.messageText,
           icon: '/pwa-icon.svg',
           badge: '/pwa-icon.svg',
-          vibrate: [200, 100, 200],
           tag: 'chat-message'
         });
         

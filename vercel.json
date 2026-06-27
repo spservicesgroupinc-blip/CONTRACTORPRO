@@ -3,11 +3,11 @@
   "cleanUrls": true,
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "/api/:path*"
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
     },
     {
-      "source": "/(css|assets|js|public)/(.*)",
+      "source": "/(assets|public)/(.*)",
       "destination": "/$1/$2"
     },
     {

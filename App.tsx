@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { UserProfile, TimeEntry, Coordinates, Task } from './types';
 import ProfileSetup from './components/ProfileSetup';
 import TimeLog from './components/TimeLog';
@@ -10,7 +10,7 @@ import Messaging from './components/Messaging';
 import BottomNav from './components/BottomNav';
 import Sidebar from './components/Sidebar';
 import { chatService } from './services/chatService';
-import { Clock, FileText, DollarSign, LayoutGrid, User, CalendarDays, Square, Trash2, Plus, CheckCircle2, Wallet, LogOut, ShieldAlert, MessageSquare, Mic, MicOff, Sparkles, Loader2, Briefcase, Tag, AlertCircle, X, Check, StopCircle, ChevronRight } from 'lucide-react';
+import { Clock, FileText, DollarSign, LayoutGrid, User, CalendarDays, Square, Trash2, Plus, CheckCircle2, Wallet, LogOut, ShieldAlert, MessageSquare, Mic, MicOff, Sparkles, Loader2, Briefcase, Tag, AlertCircle, X, Check, StopCircle, ChevronRight, Camera } from 'lucide-react';
 
 const App: React.FC = () => {
     const [profile, setProfile] = useState<UserProfile | null>(() => {

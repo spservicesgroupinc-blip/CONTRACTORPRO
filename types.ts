@@ -31,6 +31,7 @@ export interface Coordinates {
 
 export interface TimeEntry {
   id: string;
+  profileId?: string;
   projectName: string;
   clockIn: string; // ISO string
   clockInLocation?: Coordinates;
