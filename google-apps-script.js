@@ -111,9 +111,9 @@ function doPost(e) {
       
       const file = folder.createFile(blob);
       file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      const url = file.getDownloadUrl();
+      const url = "https://drive.google.com/file/d/" + file.getId() + "/view?usp=sharing";
       
-      return ContentService.createTextOutput(JSON.stringify({ success: true, data: { url: file.getUrl(), downloadUrl: url } })).setMimeType(ContentService.MimeType.JSON);
+      return ContentService.createTextOutput(JSON.stringify({ success: true, data: { url: url, downloadUrl: url } })).setMimeType(ContentService.MimeType.JSON);
     }
     
     if (action === "EDIT_TIME_ENTRY") {
@@ -547,8 +547,8 @@ function doPost(e) {
       let chatSheet = ss.getSheetByName("ChatMessages");
       if (!chatSheet) {
          chatSheet = ss.insertSheet("ChatMessages");
-         chatSheet.appendRow(["Timestamp", "Sender ID", "Sender Name", "Message Text", "Status", "Message ID"]);
-         chatSheet.getRange("A1:F1").setFontWeight("bold");
+         chatSheet.appendRow(["Timestamp", "Sender ID", "Sender Name", "Message Text", "Status", "Message ID", "Photo URL"]);
+         chatSheet.getRange("A1:G1").setFontWeight("bold");
          chatSheet.setFrozenRows(1);
       }
       chatSheet.appendRow([
@@ -557,7 +557,8 @@ function doPost(e) {
         payload.senderName || "",
         payload.messageText || "",
         payload.status || "sent",
-        payload.messageId || ""
+        payload.messageId || "",
+        payload.photoUrl || ""
       ]);
       return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Chat message sent" })).setMimeType(ContentService.MimeType.JSON);
     }
@@ -566,8 +567,8 @@ function doPost(e) {
       let chatSheet = ss.getSheetByName("ChatMessages");
       if (!chatSheet) {
          chatSheet = ss.insertSheet("ChatMessages");
-         chatSheet.appendRow(["Timestamp", "Sender ID", "Sender Name", "Message Text", "Status", "Message ID"]);
-         chatSheet.getRange("A1:F1").setFontWeight("bold");
+         chatSheet.appendRow(["Timestamp", "Sender ID", "Sender Name", "Message Text", "Status", "Message ID", "Photo URL"]);
+         chatSheet.getRange("A1:G1").setFontWeight("bold");
          chatSheet.setFrozenRows(1);
       }
       const cData = chatSheet.getDataRange().getValues();
@@ -579,7 +580,8 @@ function doPost(e) {
           senderName: String(r[2] || ""),
           messageText: String(r[3] || ""),
           status: String(r[4] || "sent"),
-          messageId: String(r[5] || "")
+          messageId: String(r[5] || ""),
+          photoUrl: r[6] ? String(r[6]) : undefined
         }));
       }
       return ContentService.createTextOutput(JSON.stringify({ success: true, data: { messages } })).setMimeType(ContentService.MimeType.JSON);

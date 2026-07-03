@@ -129,9 +129,9 @@ function doPost(e) {
       
       const file = folder.createFile(blob);
       file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      const url = file.getDownloadUrl(); // Could also be getUrl() to view in browser, but getDownloadUrl() gives direct access if needed, or getUrl for safe preview. Let's return both.
+      const url = "https://drive.google.com/file/d/" + file.getId() + "/view?usp=sharing";
       
-      return ContentService.createTextOutput(JSON.stringify({ success: true, data: { url: file.getUrl(), downloadUrl: url } })).setMimeType(ContentService.MimeType.JSON);
+      return ContentService.createTextOutput(JSON.stringify({ success: true, data: { url: url, downloadUrl: url } })).setMimeType(ContentService.MimeType.JSON);
     }
     
     if (action === "EDIT_TIME_ENTRY") {
