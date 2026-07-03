@@ -253,7 +253,19 @@ export const generateInvoicePDF = (invoice: Invoice, allUsers: UserProfile[], al
     doc.text(`Due on receipt (Net 15)`, 154, startYInfo + 18);
 
     // Generate table details
-    const tableColumn = ["Descriptive Log / Additions", "Category", "Qty / Hours", "Base Rate", "Markup", "Amount"];
+    const showCostBreakdown = invoice.showCostBreakdown !== false; // Default to true if undefined
+    const defaultColumns = ["Descriptive Log / Additions", "Category", "Qty / Hours", "Base Rate", "Markup", "Amount"];
+    
+    // Select the columns to display (filter out Base Rate & Markup if cost breakdown is disabled)
+    let selectedColumns = invoice.selectedColumns && invoice.selectedColumns.length > 0 
+        ? invoice.selectedColumns 
+        : defaultColumns;
+
+    if (!showCostBreakdown) {
+        selectedColumns = selectedColumns.filter(col => col !== "Base Rate" && col !== "Markup");
+    }
+
+    const tableColumn = selectedColumns;
     const tableRows: any[][] = [];
 
     let totalLaborBase = 0;
@@ -263,7 +275,7 @@ export const generateInvoicePDF = (invoice: Invoice, allUsers: UserProfile[], al
     invoice.timeEntryIds.forEach(id => {
         const entry = allTimeEntries.find(e => e.id === id);
         if (entry) {
-            const user = allUsers.find(u => u.id === entry.profileId);
+            const user = allUsers.find(u => String(u.id).trim() === String(entry.profileId).trim());
             const baseWage = user ? parseFloat(user.hourlyWage as any) || 0 : 0;
             const hours = calculateDuration(entry.clockIn, entry.clockOut || new Date().toISOString());
             
@@ -277,14 +289,17 @@ export const generateInvoicePDF = (invoice: Invoice, allUsers: UserProfile[], al
             const workerName = user ? user.name : 'Unassigned Tech';
             const logDesc = `Labor: ${workerName}\nSite/Project: ${entry.projectName || 'General'} (${dateStr})`;
 
-            tableRows.push([
-                logDesc,
-                "Field Labor",
-                hours.toFixed(2),
-                `$${baseWage.toFixed(2)}`,
-                invoice.markupMultiplier > 1.0 ? `x${invoice.markupMultiplier.toFixed(2)}` : 'None',
-                `$${costMarked.toFixed(2)}`
-            ]);
+            const rowMap: Record<string, string> = {
+                "Descriptive Log / Additions": logDesc,
+                "Category": "Field Labor",
+                "Qty / Hours": hours.toFixed(2),
+                "Base Rate": `$${baseWage.toFixed(2)}`,
+                "Markup": invoice.markupMultiplier > 1.0 ? `x${invoice.markupMultiplier.toFixed(2)}` : 'None',
+                "Amount": `$${costMarked.toFixed(2)}`
+            };
+
+            const rowData = selectedColumns.map(col => rowMap[col] || "");
+            tableRows.push(rowData);
         }
     });
 
@@ -293,16 +308,32 @@ export const generateInvoicePDF = (invoice: Invoice, allUsers: UserProfile[], al
     if (invoice.manualItems && invoice.manualItems.length > 0) {
         invoice.manualItems.forEach(item => {
             totalManual += item.amount;
-            tableRows.push([
-                item.description,
-                "Additional Item",
-                "1.00",
-                `$${item.amount.toFixed(2)}`,
-                "-",
-                `$${item.amount.toFixed(2)}`
-            ]);
+            
+            const rowMap: Record<string, string> = {
+                "Descriptive Log / Additions": item.description,
+                "Category": "Additional Item",
+                "Qty / Hours": "1.00",
+                "Base Rate": `$${item.amount.toFixed(2)}`,
+                "Markup": "-",
+                "Amount": `$${item.amount.toFixed(2)}`
+            };
+
+            const rowData = selectedColumns.map(col => rowMap[col] || "");
+            tableRows.push(rowData);
         });
     }
+
+    // Dynamic column styles mapping
+    const colStyles: any = {};
+    selectedColumns.forEach((colName, index) => {
+        if (colName === "Descriptive Log / Additions") {
+            colStyles[index] = { cellWidth: 75 };
+        } else if (colName === "Qty / Hours" || colName === "Base Rate" || colName === "Amount") {
+            colStyles[index] = { halign: 'right' };
+        } else if (colName === "Markup" || colName === "Category") {
+            colStyles[index] = { halign: 'center' };
+        }
+    });
 
     // Embed table
     autoTable(doc, {
@@ -324,13 +355,7 @@ export const generateInvoicePDF = (invoice: Invoice, allUsers: UserProfile[], al
         alternateRowStyles: {
             fillColor: [248, 250, 252]
         },
-        columnStyles: {
-            0: { cellWidth: 75 },
-            2: { halign: 'right' },
-            3: { halign: 'right' },
-            4: { halign: 'center' },
-            5: { halign: 'right' }
-        },
+        columnStyles: colStyles,
         margin: { left: 14, right: 14 }
     });
 
@@ -348,17 +373,27 @@ export const generateInvoicePDF = (invoice: Invoice, allUsers: UserProfile[], al
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8.5);
     
-    doc.text('Base Tracked labor:', summaryX + 4, currentSumY + 3);
-    doc.text('Company Services markup:', summaryX + 4, currentSumY + 9);
-    doc.text('Manual items & materials:', summaryX + 4, currentSumY + 15);
+    if (showCostBreakdown) {
+        doc.text('Base Tracked labor:', summaryX + 4, currentSumY + 3);
+        doc.text('Company Services markup:', summaryX + 4, currentSumY + 9);
+        doc.text('Manual items & materials:', summaryX + 4, currentSumY + 15);
 
-    const markupValueVal = totalLaborWithMarkup - totalLaborBase;
+        const markupValueVal = totalLaborWithMarkup - totalLaborBase;
 
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(30, 41, 59);
-    doc.text(`$${totalLaborBase.toFixed(2)}`, 191, currentSumY + 3, { align: 'right' });
-    doc.text(`$${markupValueVal.toFixed(2)}`, 191, currentSumY + 9, { align: 'right' });
-    doc.text(`$${totalManual.toFixed(2)}`, 191, currentSumY + 15, { align: 'right' });
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(30, 41, 59);
+        doc.text(`$${totalLaborBase.toFixed(2)}`, 191, currentSumY + 3, { align: 'right' });
+        doc.text(`$${markupValueVal.toFixed(2)}`, 191, currentSumY + 9, { align: 'right' });
+        doc.text(`$${totalManual.toFixed(2)}`, 191, currentSumY + 15, { align: 'right' });
+    } else {
+        doc.text('Labor Services Total:', summaryX + 4, currentSumY + 5);
+        doc.text('Manual items & materials:', summaryX + 4, currentSumY + 13);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(30, 41, 59);
+        doc.text(`$${totalLaborWithMarkup.toFixed(2)}`, 191, currentSumY + 5, { align: 'right' });
+        doc.text(`$${totalManual.toFixed(2)}`, 191, currentSumY + 13, { align: 'right' });
+    }
 
     // Divider line inside summary
     doc.setDrawColor(226, 232, 240);

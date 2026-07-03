@@ -22,6 +22,8 @@ export interface Invoice {
   manualItems: InvoiceItem[];
   markupMultiplier: number;
   total: number;
+  showCostBreakdown?: boolean;
+  selectedColumns?: string[];
 }
 
 export interface Coordinates {
@@ -39,6 +41,7 @@ export interface TimeEntry {
   clockOutLocation?: Coordinates;
   breaks?: { start: string; end?: string }[];
   photos?: string[];
+  isBilled?: boolean;
 }
 
 export interface UserProfile {

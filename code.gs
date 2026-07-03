@@ -87,6 +87,23 @@ function setup() {
   }
 }
 
+function matchId(sheetVal, inputId) {
+  if (sheetVal === inputId) return true;
+  if (sheetVal == null || inputId == null) return false;
+  
+  // If sheetVal is a Date object, convert to ISO string
+  if (sheetVal instanceof Date) {
+    try {
+      return sheetVal.toISOString() === String(inputId);
+    } catch (e) {
+      // fallback
+    }
+  }
+  
+  // Also compare as strings
+  return String(sheetVal) === String(inputId);
+}
+
 function doPost(e) {
   try {
     setup();
@@ -125,7 +142,7 @@ function doPost(e) {
          return ContentService.createTextOutput(JSON.stringify({ success: false, error: "No entry ID" })).setMimeType(ContentService.MimeType.JSON);
       }
       for (let i = 1; i < existingData.length; i++) {
-        if (existingData[i][0] === updatedEntry.id) {
+        if (matchId(existingData[i][0], updatedEntry.id)) {
            timeSheet.getRange(i + 1, 3).setValue(updatedEntry.projectName || "");
            timeSheet.getRange(i + 1, 4).setValue(updatedEntry.clockIn || "");
            timeSheet.getRange(i + 1, 5).setValue(updatedEntry.clockOut || "");
@@ -134,7 +151,7 @@ function doPost(e) {
            timeSheet.getRange(i + 1, 8).setValue(updatedEntry.clockOutLocation?.latitude || "");
            timeSheet.getRange(i + 1, 9).setValue(updatedEntry.clockOutLocation?.longitude || "");
            if (updatedEntry.photos) {
-             timeSheet.getRange(i + 1, 10).setValue(JSON.stringify(updatedEntry.photos));
+              timeSheet.getRange(i + 1, 10).setValue(JSON.stringify(updatedEntry.photos));
            }
            return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
         }
@@ -150,7 +167,7 @@ function doPost(e) {
          return ContentService.createTextOutput(JSON.stringify({ success: false, error: "No entry ID" })).setMimeType(ContentService.MimeType.JSON);
       }
       for (let i = 1; i < existingData.length; i++) {
-        if (existingData[i][0] === entryId) {
+        if (matchId(existingData[i][0], entryId)) {
            timeSheet.deleteRow(i + 1);
            return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
         }
@@ -176,7 +193,7 @@ function doPost(e) {
         const rowId = existingData[i][0];
         const rowProfileId = existingData[i][1];
         
-        if (rowProfileId === profileId) {
+        if (matchId(rowProfileId, profileId)) {
           if (!newEntriesMap[rowId]) {
             // Delete locally deleted entry
             timeSheet.deleteRow(i + 1);
@@ -204,7 +221,7 @@ function doPost(e) {
           // Double check to avoid global duplicate IDs
           let existsOverall = false;
           for (let i = 1; i < existingData.length; i++) {
-            if (existingData[i][0] === entry.id) {
+            if (matchId(existingData[i][0], entry.id)) {
               existsOverall = true;
               break;
             }
@@ -277,7 +294,8 @@ function doPost(e) {
              clockOut: r[4],
              clockInLocation: r[5] ? { latitude: r[5], longitude: r[6] } : null,
              clockOutLocation: r[7] ? { latitude: r[7], longitude: r[8] } : null,
-             photos: r[9] ? JSON.parse(r[9]) : []
+             photos: r[9] ? JSON.parse(r[9]) : [],
+             isBilled: r[10] === true || r[10] === "TRUE" || r[10] === "true" || r[10] === 1 || r[10] === "1"
           }));
       }
 
@@ -427,14 +445,72 @@ function doPost(e) {
     
     if (action === "SAVE_INVOICE") {
       const invoicesSheet = ss.getSheetByName("Invoices");
-      invoicesSheet.appendRow([
-        payload.id,
-        payload.customerName,
-        payload.date,
-        payload.total,
-        JSON.stringify(payload)
-      ]);
+      if (!invoicesSheet) {
+        return ContentService.createTextOutput(JSON.stringify({ success: false, error: "Invoices sheet not found" })).setMimeType(ContentService.MimeType.JSON);
+      }
+      const data = invoicesSheet.getDataRange().getValues();
+      let updated = false;
+      for (let i = 1; i < data.length; i++) {
+        if (String(data[i][0]).trim() === String(payload.id).trim()) {
+          // Update existing row
+          invoicesSheet.getRange(i + 1, 2).setValue(payload.customerName);
+          invoicesSheet.getRange(i + 1, 3).setValue(payload.date);
+          invoicesSheet.getRange(i + 1, 4).setValue(payload.total);
+          invoicesSheet.getRange(i + 1, 5).setValue(JSON.stringify(payload));
+          updated = true;
+          break;
+        }
+      }
+      if (!updated) {
+        invoicesSheet.appendRow([
+          payload.id,
+          payload.customerName,
+          payload.date,
+          payload.total,
+          JSON.stringify(payload)
+        ]);
+      }
+      
+      // Auto-mark referenced time entries as billed (Col 11)
+      if (payload.timeEntryIds && payload.timeEntryIds.length > 0) {
+        const timeSheet = ss.getSheetByName("TimeEntries");
+        if (timeSheet) {
+          const existingData = timeSheet.getDataRange().getValues();
+          const idMap = {};
+          payload.timeEntryIds.forEach(function(id) {
+            idMap[id] = true;
+          });
+          for (let i = 1; i < existingData.length; i++) {
+            const rId = existingData[i][0];
+            if (idMap[rId]) {
+              timeSheet.getRange(i + 1, 11).setValue(true);
+            }
+          }
+        }
+      }
+      
       return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === "SET_ENTRIES_BILLED_STATUS") {
+      const timeSheet = ss.getSheetByName("TimeEntries");
+      if (!timeSheet) {
+        return ContentService.createTextOutput(JSON.stringify({ success: false, error: "TimeEntries sheet not found" })).setMimeType(ContentService.MimeType.JSON);
+      }
+      const existingData = timeSheet.getDataRange().getValues();
+      const targetIds = payload.entryIds || [];
+      const statusValue = payload.isBilled;
+      const idMap = {};
+      targetIds.forEach(function(id) {
+        idMap[id] = true;
+      });
+      for (let i = 1; i < existingData.length; i++) {
+        const rId = existingData[i][0];
+        if (idMap[rId]) {
+          timeSheet.getRange(i + 1, 11).setValue(statusValue);
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Updated billed status" })).setMimeType(ContentService.MimeType.JSON);
     }
 
     if (action === "ADD_JOB" || action === "ADD_PROJECT") {

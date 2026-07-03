@@ -24,12 +24,14 @@ import {
     X,
     UserCheck,
     Coins,
-    UserX
+    UserX,
+    Edit
 } from 'lucide-react';
 import { generateInvoicePDF } from '../services/pdfService';
 import Messaging from './Messaging';
 import AdminBottomNav from './AdminBottomNav';
 import { chatService } from '../services/chatService';
+import { getDirectImageUrl } from '../photoUtils';
 
 interface AdminDashboardProps {
     onClose: () => void;
@@ -85,10 +87,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
 
     // Make Invoice state
     const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
+    const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
     const [invoiceCustomer, setInvoiceCustomer] = useState('');
     const [invoiceMarkup, setInvoiceMarkup] = useState<number>(1.0); // Multiplier
     const [invoiceSelectedEntries, setInvoiceSelectedEntries] = useState<Set<string>>(new Set());
     const [invoiceManualItems, setInvoiceManualItems] = useState<InvoiceItem[]>([]);
+    const [invoiceShowCostBreakdown, setInvoiceShowCostBreakdown] = useState<boolean>(true);
+    const [invoiceSelectedColumns, setInvoiceSelectedColumns] = useState<string[]>([
+        "Descriptive Log / Additions",
+        "Category",
+        "Qty / Hours",
+        "Base Rate",
+        "Markup",
+        "Amount"
+    ]);
+    const [invoiceWeekFilter, setInvoiceWeekFilter] = useState<string>('all');
+    const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<string>('unbilled'); // unbilled, billed, all
     const [newManualItemDesc, setNewManualItemDesc] = useState('');
     const [newManualItemAmt, setNewManualItemAmt] = useState('');
 
@@ -458,14 +472,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
             return;
         }
         setIsLoading(true);
+        const existingInv = adminData?.invoices?.find(i => i.id === editingInvoiceId);
         const inv: Invoice = {
-            id: Math.random().toString(36).substring(2, 12),
-            date: new Date().toISOString(),
+            id: editingInvoiceId || Math.random().toString(36).substring(2, 12),
+            date: existingInv ? existingInv.date : new Date().toISOString(),
             customerName: invoiceCustomer.trim(),
             timeEntryIds: Array.from(invoiceSelectedEntries),
             manualItems: invoiceManualItems,
             markupMultiplier: invoiceMarkup,
-            total: total
+            total: total,
+            showCostBreakdown: invoiceShowCostBreakdown,
+            selectedColumns: invoiceSelectedColumns
         };
 
         try {
@@ -485,13 +502,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
             }
             
             setIsCreatingInvoice(false);
+            setEditingInvoiceId(null);
             setInvoiceCustomer('');
             setInvoiceSelectedEntries(new Set());
             setInvoiceManualItems([]);
             setInvoiceMarkup(1.0);
+            setInvoiceShowCostBreakdown(true);
+            setInvoiceSelectedColumns([
+                "Descriptive Log / Additions",
+                "Category",
+                "Qty / Hours",
+                "Base Rate",
+                "Markup",
+                "Amount"
+            ]);
             await fetchAdminData();
         } catch (err: any) {
             alert('Failed to save invoice: ' + err.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleSetBilledStatus = async (entryIds: string[], isBilled: boolean) => {
+        if (entryIds.length === 0) return;
+        setIsLoading(true);
+        try {
+            const res = await fetch('/api/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    payload: { 
+                        action: 'SET_ENTRIES_BILLED_STATUS', 
+                        payload: { entryIds, isBilled } 
+                    }
+                })
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Failed to update billed status');
+            await fetchAdminData();
+        } catch (err: any) {
+            alert('Failed to update billed status: ' + err.message);
         } finally {
             setIsLoading(false);
         }
@@ -588,7 +639,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
     }
 
     const filteredEntries = adminData?.entries.filter(e => {
-        const matchesUser = selectedUser ? e.profileId === selectedUser : true;
+        const matchesUser = selectedUser ? String(e.profileId).trim() === String(selectedUser).trim() : true;
         const matchesJob = selectedJob ? (e.projectName || 'General') === selectedJob : true;
         
         let matchesWeek = true;
@@ -621,7 +672,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
     let totalPay = 0;
     filteredEntries.forEach(entry => {
         // Find user for wage
-        const user = adminData?.users.find(u => u.id === entry.profileId);
+        const user = adminData?.users.find(u => String(u.id).trim() === String(entry.profileId).trim());
         const wage = user ? parseFloat(user.hourlyWage) : 0;
         
         let inTime = new Date(entry.clockIn).getTime();
@@ -868,7 +919,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                                 </div>
                             ) : (
                                 adminData?.entries.filter(e => !e.clockOut).map((e, idx) => {
-                                    const user = adminData.users.find(u => u.id === e.profileId);
+                                    const user = adminData.users.find(u => String(u.id).trim() === String(e.profileId).trim());
                                     return (
                                         <div key={`${e.id || 'active'}_${idx}`} className="p-4 bg-slate-50 border border-slate-150 rounded-xl flex items-center justify-between hover:border-blue-250 transition-all">
                                             <div>
@@ -1098,7 +1149,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                         ) : (
                             <div className="space-y-2.5">
                                 {filteredEntries.map((e, idx) => {
-                                    const user = adminData?.users.find(u => u.id === e.profileId);
+                                    const user = adminData?.users.find(u => String(u.id).trim() === String(e.profileId).trim());
                                     const wage = user ? parseFloat(user.hourlyWage) : 0;
                                     const inTime = new Date(e.clockIn).getTime();
                                     const outTime = e.clockOut ? new Date(e.clockOut).getTime() : Date.now();
@@ -1142,7 +1193,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                                                 <div className="mt-2 pt-2 border-t border-slate-50 flex gap-2 overflow-x-auto">
                                                     {e.photos.map((url, i) => (
                                                         <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="shrink-0">
-                                                            <img src={url} alt="Attachment" className="w-10 h-10 rounded-md object-cover border border-slate-200" />
+                                                            <img src={getDirectImageUrl(url)} alt="Attachment" className="w-10 h-10 rounded-md object-cover border border-slate-200" />
                                                         </a>
                                                     ))}
                                                 </div>
@@ -1386,11 +1437,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                         {/* Navigation Sub-Header */}
                         <div className="flex items-center gap-3 mb-5 pl-1 justify-between">
                             <div className="flex items-center gap-3">
-                                <button onClick={() => { setActiveTab('hub'); setIsCreatingInvoice(false); }} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-all cursor-pointer">
+                                <button onClick={() => { setActiveTab('hub'); setIsCreatingInvoice(false); setEditingInvoiceId(null); }} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-all cursor-pointer">
                                     <ChevronLeft className="w-5 h-5" />
                                 </button>
                                 <div>
-                                    <h2 className="text-base font-bold text-slate-800 leading-none">{isCreatingInvoice ? 'Draft Invoice Bill' : 'Invoice Billing Console'}</h2>
+                                    <h2 className="text-base font-bold text-slate-800 leading-none">
+                                        {isCreatingInvoice 
+                                            ? (editingInvoiceId ? 'Edit Invoice Draft' : 'Draft Invoice Bill') 
+                                            : 'Invoice Billing Console'}
+                                    </h2>
                                     <p className="text-xs text-slate-500 mt-1">{isCreatingInvoice ? 'Extract clocked hours and custom extra line services' : 'Review historical PDFs and draft fresh balances client invoices'}</p>
                                 </div>
                             </div>
@@ -1404,10 +1459,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                                     <button 
                                         onClick={() => {
                                             setIsCreatingInvoice(true);
+                                            setEditingInvoiceId(null);
                                             setInvoiceCustomer('');
                                             setInvoiceMarkup(1.0);
                                             setInvoiceSelectedEntries(new Set());
                                             setInvoiceManualItems([]);
+                                            setInvoiceShowCostBreakdown(true);
+                                            setInvoiceSelectedColumns([
+                                                "Descriptive Log / Additions",
+                                                "Category",
+                                                "Qty / Hours",
+                                                "Base Rate",
+                                                "Markup",
+                                                "Amount"
+                                            ]);
                                         }}
                                         className="bg-blue-950 hover:bg-slate-900 border border-transparent shadow shadow-blue-950/20 text-white font-bold text-xs py-2 px-3.5 rounded-xl flex items-center gap-1 cursor-pointer transition-transform"
                                     >
@@ -1426,18 +1491,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                                                             <Calendar className="w-3.5 h-3.5" />
                                                             {new Date(inv.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
                                                         </p>
-                                                        <span className="inline-block mt-2.5 text-[9px] bg-slate-50 border border-slate-100 text-slate-500 font-bold px-2 py-0.5 rounded uppercase tracking-wider">ID: {inv.id.substring(0, 8)}</span>
+                                                        <div className="flex flex-wrap gap-1.5 mt-2.5">
+                                                            <span className="text-[9px] bg-slate-50 border border-slate-100 text-slate-500 font-bold px-2 py-0.5 rounded uppercase tracking-wider">ID: {inv.id.substring(0, 8)}</span>
+                                                            {inv.showCostBreakdown === false ? (
+                                                                <span className="text-[9px] bg-amber-50 border border-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded uppercase tracking-wider">Costs Hidden</span>
+                                                            ) : (
+                                                                <span className="text-[9px] bg-blue-50 border border-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded uppercase tracking-wider font-semibold">Breakdown Visible</span>
+                                                            )}
+                                                            {inv.selectedColumns && inv.selectedColumns.length > 0 && (
+                                                                <span className="text-[9px] bg-slate-100 border border-slate-200 text-slate-600 font-bold px-2 py-0.5 rounded uppercase tracking-wider">
+                                                                    {inv.selectedColumns.filter(c => inv.showCostBreakdown !== false || (c !== "Base Rate" && c !== "Markup")).length} Columns
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                     <div className="text-right flex flex-col items-end">
                                                         <p className="font-black text-emerald-600 text-[18px] leading-none">${inv.total.toFixed(2)}</p>
                                                         <p className="text-[10px] font-bold text-slate-400 mt-1.5">{inv.timeEntryIds.length} hours-tracked entries</p>
                                                         
-                                                        <button 
-                                                            onClick={() => generateInvoicePDF(inv, adminData.users, adminData.entries)}
-                                                            className="mt-3 inline-flex items-center gap-1 text-[11px] font-bold text-blue-650 bg-blue-50 border border-blue-100 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
-                                                        >
-                                                            <Download className="w-3.5 h-3.5" /> PDF Download
-                                                        </button>
+                                                        <div className="flex flex-wrap gap-2 mt-3 justify-end">
+                                                            <button 
+                                                                onClick={() => {
+                                                                    setEditingInvoiceId(inv.id);
+                                                                    setInvoiceCustomer(inv.customerName);
+                                                                    setInvoiceMarkup(inv.markupMultiplier || 1.0);
+                                                                    setInvoiceSelectedEntries(new Set(inv.timeEntryIds || []));
+                                                                    setInvoiceManualItems(inv.manualItems || []);
+                                                                    setInvoiceShowCostBreakdown(inv.showCostBreakdown !== false);
+                                                                    setInvoiceSelectedColumns(inv.selectedColumns || [
+                                                                        "Descriptive Log / Additions",
+                                                                        "Category",
+                                                                        "Qty / Hours",
+                                                                        "Base Rate",
+                                                                        "Markup",
+                                                                        "Amount"
+                                                                    ]);
+                                                                    setIsCreatingInvoice(true);
+                                                                }}
+                                                                className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-800 bg-slate-50 border border-slate-200/60 hover:bg-slate-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer shadow-sm"
+                                                            >
+                                                                <Edit className="w-3.5 h-3.5" /> Return to Sheet &amp; Edit
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => generateInvoicePDF(inv, adminData.users, adminData.entries)}
+                                                                className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-650 bg-blue-50 border border-blue-100 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer shadow-sm"
+                                                            >
+                                                                <Download className="w-3.5 h-3.5" /> PDF Download
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1453,8 +1554,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                             /* Create Invoice visual step-board Form */
                             <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm space-y-5 animate-in fade-in duration-300">
                                 <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-                                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Creation Elements</h3>
-                                    <button onClick={() => setIsCreatingInvoice(false)} className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer">Back to List</button>
+                                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                                        {editingInvoiceId ? 'Modify Statement Draft Elements' : 'Creation Elements'}
+                                    </h3>
+                                    <button 
+                                        onClick={() => {
+                                            setIsCreatingInvoice(false);
+                                            setEditingInvoiceId(null);
+                                        }} 
+                                        className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
+                                    >
+                                        Back to List
+                                    </button>
                                 </div>
                                 
                                 <div className="space-y-4">
@@ -1484,38 +1595,171 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                                     
                                     {/* Selectable Hours Entries Checklist container */}
                                     <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">Clocked Hours checklist</label>
-                                        <div className="max-h-56 overflow-y-auto border border-slate-150 rounded-xl bg-slate-50/50 p-2.5 space-y-1.5 shadow-inner">
-                                            {adminData?.entries.filter(e => e.clockOut).length === 0 ? (
-                                                <p className="text-[11px] text-slate-450 font-semibold text-center py-4">No completed hours logs stored.</p>
-                                            ) : (
-                                                adminData?.entries.filter(e => e.clockOut).map((e, idx) => {
-                                                    const u = adminData?.users.find(u => u.id === e.profileId);
-                                                    const dur = (new Date(e.clockOut || Date.now()).getTime() - new Date(e.clockIn).getTime()) / 3600000;
-                                                    const cost = Math.max(0, dur) * (u ? parseFloat(u.hourlyWage) : 0);
-                                                    const selected = invoiceSelectedEntries.has(e.id);
-                                                    return (
-                                                        <div 
-                                                            key={`${e.id || 'completed'}_${idx}`} 
-                                                            onClick={() => {
-                                                                const next = new Set(invoiceSelectedEntries);
-                                                                if (selected) next.delete(e.id); else next.add(e.id);
-                                                                setInvoiceSelectedEntries(next);
-                                                            }}
-                                                            className={`p-3 rounded-xl cursor-pointer flex justify-between items-center border transition-all ${selected ? 'bg-blue-50 border-blue-300 text-blue-750' : 'bg-white border-slate-150 hover:border-slate-350 text-slate-700'}`}
-                                                        >
-                                                            <div className="min-w-0 pr-2">
-                                                                <p className="font-bold text-xs leading-normal truncate">{new Date(e.clockIn).toLocaleDateString()} &mdash; {u?.name}</p>
-                                                                <p className="text-[10px] text-slate-450 font-bold mt-1 leading-none">{e.projectName} &bull; {Math.max(0, dur).toFixed(2)}h</p>
+                                        {(() => {
+                                            const completedEntries = adminData?.entries.filter(e => e.clockOut) || [];
+                                            
+                                            const getMondayDateString = (isoStr: string) => {
+                                                try {
+                                                    const d = new Date(isoStr);
+                                                    const day = d.getDay();
+                                                    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+                                                    const mon = new Date(d.setDate(diff));
+                                                    return mon.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+                                                } catch (err) {
+                                                    return "Unknown Week";
+                                                }
+                                            };
+
+                                            const uniqueWeeks = Array.from(new Set(completedEntries.map(e => getMondayDateString(e.clockIn)))).sort((a, b) => {
+                                                return new Date(b).getTime() - new Date(a).getTime();
+                                            });
+
+                                            const filteredCheckedEntries = completedEntries.filter(e => {
+                                                // 1. Week Filter
+                                                if (invoiceWeekFilter !== 'all') {
+                                                    if (getMondayDateString(e.clockIn) !== invoiceWeekFilter) return false;
+                                                }
+                                                // 2. Status Filter
+                                                if (invoiceStatusFilter === 'unbilled') {
+                                                    if (e.isBilled) return false;
+                                                } else if (invoiceStatusFilter === 'billed') {
+                                                    if (!e.isBilled) return false;
+                                                }
+                                                return true;
+                                            });
+
+                                            return (
+                                                <div className="space-y-2.5">
+                                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2 ml-1">
+                                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Clocked Hours checklist</label>
+                                                        
+                                                        {/* Filters selection */}
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            {/* Week filter */}
+                                                            <div className="flex items-center gap-1.5 bg-slate-100 border border-slate-200/60 rounded-xl px-2.5 py-1 text-[11px] font-bold text-slate-600">
+                                                                <span className="text-slate-400 font-extrabold text-[9px] uppercase tracking-wide">Week:</span>
+                                                                <select 
+                                                                    value={invoiceWeekFilter} 
+                                                                    onChange={(e) => setInvoiceWeekFilter(e.target.value)}
+                                                                    className="bg-transparent focus:outline-none cursor-pointer text-slate-700 max-w-[130px] sm:max-w-none text-ellipsis"
+                                                                >
+                                                                    <option value="all">All Weeks</option>
+                                                                    {uniqueWeeks.map(wk => (
+                                                                        <option key={wk} value={wk}>Week of {wk}</option>
+                                                                    ))}
+                                                                </select>
                                                             </div>
-                                                            <div className="text-right shrink-0">
-                                                                <span className="font-extrabold text-xs text-emerald-600 block">${cost.toFixed(2)}</span>
+
+                                                            {/* Status filter */}
+                                                            <div className="flex items-center gap-1.5 bg-slate-100 border border-slate-200/60 rounded-xl px-2.5 py-1 text-[11px] font-bold text-slate-600">
+                                                                <span className="text-slate-400 font-extrabold text-[9px] uppercase tracking-wide">Status:</span>
+                                                                <select 
+                                                                    value={invoiceStatusFilter} 
+                                                                    onChange={(e) => setInvoiceStatusFilter(e.target.value)}
+                                                                    className="bg-transparent focus:outline-none cursor-pointer text-slate-700"
+                                                                >
+                                                                    <option value="unbilled">Unbilled Only</option>
+                                                                    <option value="billed">Billed Only</option>
+                                                                    <option value="all">All Logs</option>
+                                                                </select>
                                                             </div>
                                                         </div>
-                                                    );
-                                                })
-                                            )}
-                                        </div>
+                                                    </div>
+
+                                                    {/* Bulk actions */}
+                                                    {invoiceSelectedEntries.size > 0 && (
+                                                        <div className="flex items-center justify-between gap-2 p-2 bg-blue-50/50 border border-blue-100 rounded-xl mb-2 animate-in fade-in slide-in-from-top-1">
+                                                            <span className="text-[11px] font-extrabold text-blue-800 ml-1.5">{invoiceSelectedEntries.size} Selected</span>
+                                                            <div className="flex gap-1.5">
+                                                                <button 
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        handleSetBilledStatus(Array.from(invoiceSelectedEntries), true);
+                                                                        setInvoiceSelectedEntries(new Set());
+                                                                    }}
+                                                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] px-2 py-1 rounded-lg cursor-pointer shadow-sm active:scale-95 transition-all"
+                                                                >
+                                                                    Mark as Billed
+                                                                </button>
+                                                                <button 
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        handleSetBilledStatus(Array.from(invoiceSelectedEntries), false);
+                                                                        setInvoiceSelectedEntries(new Set());
+                                                                    }}
+                                                                    className="bg-slate-600 hover:bg-slate-700 text-white font-bold text-[10px] px-2 py-1 rounded-lg cursor-pointer shadow-sm active:scale-95 transition-all"
+                                                                >
+                                                                    Mark as Unbilled
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    <div className="max-h-56 overflow-y-auto border border-slate-150 rounded-xl bg-slate-50/50 p-2.5 space-y-1.5 shadow-inner">
+                                                        {filteredCheckedEntries.length === 0 ? (
+                                                            <p className="text-[11px] text-slate-450 font-semibold text-center py-4">No hours logs match selected filters.</p>
+                                                        ) : (
+                                                            filteredCheckedEntries.map((e, idx) => {
+                                                                const u = adminData?.users.find(u => String(u.id).trim() === String(e.profileId).trim());
+                                                                const dur = (new Date(e.clockOut || Date.now()).getTime() - new Date(e.clockIn).getTime()) / 3600000;
+                                                                const cost = Math.max(0, dur) * (u ? parseFloat(u.hourlyWage) : 0);
+                                                                const selected = invoiceSelectedEntries.has(e.id);
+                                                                return (
+                                                                    <div 
+                                                                        key={`${e.id || 'completed'}_${idx}`} 
+                                                                        onClick={() => {
+                                                                            const next = new Set(invoiceSelectedEntries);
+                                                                            if (selected) next.delete(e.id); else next.add(e.id);
+                                                                            setInvoiceSelectedEntries(next);
+                                                                        }}
+                                                                        className={`p-3 rounded-xl cursor-pointer flex justify-between items-center border transition-all ${selected ? 'bg-blue-50 border-blue-300 text-blue-750' : 'bg-white border-slate-150 hover:border-slate-350 text-slate-700'}`}
+                                                                    >
+                                                                        <div className="flex items-center gap-2.5 min-w-0 pr-2 pb-0.5">
+                                                                            <input 
+                                                                                type="checkbox"
+                                                                                checked={selected}
+                                                                                onChange={() => {}}
+                                                                                onClick={(evt) => {
+                                                                                    evt.stopPropagation();
+                                                                                    const next = new Set(invoiceSelectedEntries);
+                                                                                    if (selected) next.delete(e.id); else next.add(e.id);
+                                                                                    setInvoiceSelectedEntries(next);
+                                                                                }}
+                                                                                className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
+                                                                            />
+                                                                            <div className="min-w-0">
+                                                                                <p className="font-bold text-xs leading-normal truncate">{new Date(e.clockIn).toLocaleDateString()} &mdash; {u?.name}</p>
+                                                                                <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                                                                    <span className="text-[10px] text-slate-450 font-bold">{e.projectName} &bull; {Math.max(0, dur).toFixed(2)}h</span>
+                                                                                    {e.isBilled ? (
+                                                                                        <span className="inline-flex items-center text-[8px] font-black bg-emerald-50 border border-emerald-100 text-emerald-700 px-1 py-0.5 rounded leading-none uppercase">Billed</span>
+                                                                                    ) : (
+                                                                                        <span className="inline-flex items-center text-[8px] font-black bg-slate-100 border border-slate-200 text-slate-500 px-1 py-0.5 rounded leading-none uppercase">Unbilled</span>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="text-right shrink-0 flex flex-col items-end gap-1.5">
+                                                                            <span className="font-extrabold text-xs text-emerald-600">${cost.toFixed(2)}</span>
+                                                                            <button 
+                                                                                type="button"
+                                                                                onClick={(evt) => {
+                                                                                    evt.stopPropagation();
+                                                                                    handleSetBilledStatus([e.id], !e.isBilled);
+                                                                                }}
+                                                                                className="text-[9px] font-extrabold text-blue-600 hover:text-blue-800 cursor-pointer underline hover:no-underline"
+                                                                            >
+                                                                                {e.isBilled ? "Mark Unbilled" : "Mark Billed"}
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
 
                                     {/* Markup selector multiplier */}
@@ -1531,6 +1775,72 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                                                 className="w-24 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs font-semibold"
                                             />
                                             <span className="text-[11px] font-bold text-slate-400">Default is 1.0 (No premium markup) &bull; 1.5 equates to 50% extra fee</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Invoice PDF Output Customization Panel */}
+                                    <div className="bg-slate-50 border border-slate-150 rounded-2xl p-4.5 space-y-4">
+                                        <div>
+                                            <span className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">Invoice PDF Column Customization</span>
+                                            <p className="text-[11px] text-slate-450 font-medium mb-3">Select which columns should be rendered on the invoice document table.</p>
+                                            
+                                            <div className="grid grid-cols-2 gap-2.5">
+                                                {["Descriptive Log / Additions", "Category", "Qty / Hours", "Base Rate", "Markup", "Amount"].map((col) => {
+                                                    const isChecked = invoiceSelectedColumns.includes(col);
+                                                    const isDisabled = !invoiceShowCostBreakdown && (col === "Base Rate" || col === "Markup");
+                                                    
+                                                    return (
+                                                        <label 
+                                                            key={col} 
+                                                            className={`flex items-start gap-2 p-2.5 rounded-lg border text-xs font-semibold cursor-pointer select-none transition-all ${
+                                                                isDisabled 
+                                                                    ? 'bg-slate-100 border-slate-200 text-slate-450 cursor-not-allowed opacity-60' 
+                                                                    : isChecked 
+                                                                        ? 'bg-blue-50/50 border-blue-200 text-blue-800' 
+                                                                        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                                                            }`}
+                                                        >
+                                                            <input 
+                                                                type="checkbox" 
+                                                                checked={isChecked && !isDisabled}
+                                                                disabled={isDisabled}
+                                                                onChange={() => {
+                                                                    if (invoiceSelectedColumns.includes(col)) {
+                                                                        setInvoiceSelectedColumns(invoiceSelectedColumns.filter(c => c !== col));
+                                                                    } else {
+                                                                        setInvoiceSelectedColumns([...invoiceSelectedColumns, col]);
+                                                                    }
+                                                                }}
+                                                                className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                                            />
+                                                            <span className="leading-tight">
+                                                                {col}
+                                                                {isDisabled && <span className="block text-[9px] font-bold text-amber-600">(Hidden by cost toggle)</span>}
+                                                            </span>
+                                                        </label>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+
+                                        <div className="border-t border-slate-200/60 pt-3 flex items-start gap-3">
+                                            <div className="flex items-center h-5">
+                                                <input
+                                                    id="show-cost-breakdown-checkbox"
+                                                    type="checkbox"
+                                                    checked={invoiceShowCostBreakdown}
+                                                    onChange={(e) => setInvoiceShowCostBreakdown(e.target.checked)}
+                                                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                                />
+                                            </div>
+                                            <div className="text-xs">
+                                                <label htmlFor="show-cost-breakdown-checkbox" className="font-extrabold text-slate-700 cursor-pointer block select-none">
+                                                    Display Internal Cost Breakdown
+                                                </label>
+                                                <p className="text-[11px] text-slate-450 font-medium mt-0.5 leading-normal">
+                                                    When disabled, employee base wages and markups are hidden. Only fully-marked-up amounts are rendered, and the summary section consolidates labor costs to respect company financial privacy.
+                                                </p>
+                                            </div>
                                         </div>
                                     </div>
                                     
@@ -1573,7 +1883,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                                             Array.from(invoiceSelectedEntries).forEach(id => {
                                                 const e = adminData?.entries.find(x => x.id === id);
                                                 if(e) {
-                                                    const u = adminData?.users.find(u => u.id === e.profileId);
+                                                    const u = adminData?.users.find(u => String(u.id).trim() === String(e.profileId).trim());
                                                     const dur = (new Date(e.clockOut || Date.now()).getTime() - new Date(e.clockIn).getTime()) / 3600000;
                                                     entriesCost += Math.max(0, dur) * (u ? parseFloat(u.hourlyWage) : 0);
                                                 }

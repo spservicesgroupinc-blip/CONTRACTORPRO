@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { TimeEntry, UserProfile } from '../types';
 import { Edit2, Trash2, Plus, X, Calendar, Clock, AlertCircle, Check, Camera, Loader2, Image as ImageIcon } from 'lucide-react';
-import { compressAndEncodeBase64 } from '../photoUtils';
+import { compressAndEncodeBase64, getDirectImageUrl } from '../photoUtils';
 
 interface TimeLogProps {
   timeEntries: TimeEntry[];
@@ -287,7 +287,7 @@ const TimeLog: React.FC<TimeLogProps> = ({
                                         <div className="mt-3 pt-3 border-t border-gray-100 flex gap-2 overflow-x-auto pb-1">
                                             {entry.photos.map((url, i) => (
                                                 <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="shrink-0">
-                                                    <img src={url} alt="Log attachment" className="w-12 h-12 rounded-lg object-cover border border-gray-200" />
+                                                    <img src={getDirectImageUrl(url)} alt="Log attachment" className="w-12 h-12 rounded-lg object-cover border border-gray-200" />
                                                 </a>
                                             ))}
                                         </div>
@@ -399,7 +399,7 @@ const TimeLog: React.FC<TimeLogProps> = ({
                                 <div className="flex gap-2 items-start flex-wrap bg-gray-50 p-3 rounded-xl border border-gray-200">
                                     {photos.map((url, i) => (
                                         <div key={i} className="relative group">
-                                            <img src={url} alt="Attachment" className="w-14 h-14 object-cover rounded-lg border border-gray-300" />
+                                            <img src={getDirectImageUrl(url)} alt="Attachment" className="w-14 h-14 object-cover rounded-lg border border-gray-300" />
                                             <button
                                                 type="button"
                                                 onClick={() => setPhotos(photos.filter((_, idx) => idx !== i))}

@@ -11,6 +11,7 @@ import BottomNav from './components/BottomNav';
 import Sidebar from './components/Sidebar';
 import { chatService } from './services/chatService';
 import { Clock, FileText, DollarSign, LayoutGrid, User, CalendarDays, Square, Trash2, Plus, CheckCircle2, Wallet, LogOut, ShieldAlert, MessageSquare, Mic, MicOff, Sparkles, Loader2, Briefcase, Tag, AlertCircle, X, Check, StopCircle, ChevronRight, Camera } from 'lucide-react';
+import { getDirectImageUrl } from './photoUtils';
 
 export const getEntryDuration = (entry: TimeEntry, fallbackTimeMs: number) => {
     const inTime = new Date(entry.clockIn).getTime();
@@ -1076,7 +1077,7 @@ const App: React.FC = () => {
                                                         <div className="flex gap-1.5 mt-2 overflow-x-auto pb-1">
                                                             {t.photos.map((url, i) => (
                                                                 <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="shrink-0">
-                                                                    <img src={url} alt="Task photo" className="w-8 h-8 rounded object-cover border border-gray-200" />
+                                                                    <img src={getDirectImageUrl(url)} alt="Task photo" className="w-8 h-8 rounded object-cover border border-gray-200" />
                                                                 </a>
                                                             ))}
                                                         </div>
@@ -1767,7 +1768,7 @@ const App: React.FC = () => {
                                     <div className="flex gap-2 items-start flex-wrap bg-gray-50 p-2 rounded-xl border border-gray-200">
                                         {quickTaskPhotos.map((url, i) => (
                                             <div key={i} className="relative group">
-                                                <img src={url} alt="Attachment" className="w-12 h-12 object-cover rounded-lg border border-gray-300" />
+                                                <img src={getDirectImageUrl(url)} alt="Attachment" className="w-12 h-12 object-cover rounded-lg border border-gray-300" />
                                                 <button
                                                     type="button"
                                                     onClick={() => setQuickTaskPhotos(quickTaskPhotos.filter((_, idx) => idx !== i))}
