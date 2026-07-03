@@ -28,7 +28,7 @@ export const Messaging: React.FC<MessagingProps> = ({ profile }) => {
     });
     return () => {
       chatService.setChatOpen(false);
-      chatService.stopPolling();
+      
       unsubscribe();
     };
   }, []);

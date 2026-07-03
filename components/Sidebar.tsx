@@ -7,9 +7,10 @@ interface SidebarProps {
   currentTab: string;
   setCurrentTab: (tab: string) => void;
   onLogout: () => void;
+  unreadChatCount?: number;
 }
 
-const NavItem = ({ icon: Icon, label, isActive, disabled, onClick }: any) => {
+const NavItem = ({ icon: Icon, label, isActive, disabled, onClick, badge }: any) => {
   if (disabled) {
     return (
       <div className="flex items-center gap-3 px-4 py-3 rounded-lg text-blue-600/50 cursor-not-allowed">
@@ -23,19 +24,26 @@ const NavItem = ({ icon: Icon, label, isActive, disabled, onClick }: any) => {
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+      className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${
         isActive 
           ? 'bg-blue-800 text-white font-semibold' 
           : 'text-gray-300 hover:bg-blue-900 hover:text-white'
       }`}
     >
-      <Icon className="w-5 h-5" />
-      <span className="font-medium">{label}</span>
+      <div className="flex items-center gap-3">
+        <Icon className="w-5 h-5" />
+        <span className="font-medium">{label}</span>
+      </div>
+      {badge > 0 && (
+        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shadow-sm">
+          {badge > 9 ? '9+' : badge}
+        </span>
+      )}
     </button>
   );
 };
 
-const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, currentTab, setCurrentTab, onLogout }) => {
+const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, currentTab, setCurrentTab, onLogout, unreadChatCount = 0 }) => {
   return (
     <>
       {/* Backdrop for mobile */}
@@ -78,7 +86,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, currentTab, setCur
             icon={MessageSquare} 
             label="Team Chat" 
             isActive={currentTab === 'chat'} 
-            onClick={() => { setCurrentTab('chat'); setIsOpen(false); }} 
+            onClick={() => { setCurrentTab('chat'); setIsOpen(false); }}
+            badge={unreadChatCount}
           />
           <NavItem 
             icon={User} 

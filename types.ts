@@ -42,6 +42,9 @@ export interface TimeEntry {
   breaks?: { start: string; end?: string }[];
   photos?: string[];
   isBilled?: boolean;
+  isExpense?: boolean;
+  expenseDescription?: string;
+  expenseAmount?: number;
 }
 
 export interface UserProfile {

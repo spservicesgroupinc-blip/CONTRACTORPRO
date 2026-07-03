@@ -153,6 +153,9 @@ function doPost(e) {
            if (updatedEntry.photos) {
               timeSheet.getRange(i + 1, 10).setValue(JSON.stringify(updatedEntry.photos));
            }
+           timeSheet.getRange(i + 1, 12).setValue(updatedEntry.isExpense ? "TRUE" : "FALSE");
+           timeSheet.getRange(i + 1, 13).setValue(updatedEntry.expenseDescription || "");
+           timeSheet.getRange(i + 1, 14).setValue(updatedEntry.expenseAmount !== undefined ? updatedEntry.expenseAmount : "");
            return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
         }
       }
@@ -209,6 +212,9 @@ function doPost(e) {
             timeSheet.getRange(rowIndex, 8).setValue(entry.clockOutLocation?.latitude || "");
             timeSheet.getRange(rowIndex, 9).setValue(entry.clockOutLocation?.longitude || "");
             timeSheet.getRange(rowIndex, 10).setValue(entry.photos ? JSON.stringify(entry.photos) : "[]");
+            timeSheet.getRange(rowIndex, 12).setValue(entry.isExpense ? "TRUE" : "FALSE");
+            timeSheet.getRange(rowIndex, 13).setValue(entry.expenseDescription || "");
+            timeSheet.getRange(rowIndex, 14).setValue(entry.expenseAmount !== undefined ? entry.expenseAmount : "");
             
             existingIdsInPayload.add(rowId);
           }
@@ -237,7 +243,11 @@ function doPost(e) {
               entry.clockInLocation?.longitude || "",
               entry.clockOutLocation?.latitude || "",
               entry.clockOutLocation?.longitude || "",
-              entry.photos ? JSON.stringify(entry.photos) : "[]"
+              entry.photos ? JSON.stringify(entry.photos) : "[]",
+              "", // isBilled (defaults empty)
+              entry.isExpense ? "TRUE" : "FALSE",
+              entry.expenseDescription || "",
+              entry.expenseAmount !== undefined ? entry.expenseAmount : ""
             ]);
           }
         }
@@ -250,7 +260,7 @@ function doPost(e) {
       const existingData = usersSheet.getDataRange().getValues();
       let found = false;
       for (let i = 1; i < existingData.length; i++) {
-        if (existingData[i][0] === payload.id) {
+        if (matchId(existingData[i][0], payload.id)) {
           found = true;
           // Update wage and name
           usersSheet.getRange(i + 1, 2).setValue(payload.name);
@@ -295,7 +305,10 @@ function doPost(e) {
              clockInLocation: r[5] ? { latitude: r[5], longitude: r[6] } : null,
              clockOutLocation: r[7] ? { latitude: r[7], longitude: r[8] } : null,
              photos: r[9] ? JSON.parse(r[9]) : [],
-             isBilled: r[10] === true || r[10] === "TRUE" || r[10] === "true" || r[10] === 1 || r[10] === "1"
+             isBilled: r[10] === true || r[10] === "TRUE" || r[10] === "true" || r[10] === 1 || r[10] === "1",
+             isExpense: r[11] === true || r[11] === "TRUE" || r[11] === "true",
+             expenseDescription: r[12] || "",
+             expenseAmount: r[13] ? parseFloat(r[13]) : undefined
           }));
       }
 
@@ -403,7 +416,11 @@ function doPost(e) {
                clockOut: r[4],
                clockInLocation: r[5] ? { latitude: r[5], longitude: r[6] } : null,
                clockOutLocation: r[7] ? { latitude: r[7], longitude: r[8] } : null,
-               photos: r[9] ? JSON.parse(r[9]) : []
+               photos: r[9] ? JSON.parse(r[9]) : [],
+               isBilled: r[10] === true || r[10] === "TRUE" || r[10] === "true" || r[10] === 1 || r[10] === "1",
+               isExpense: r[11] === true || r[11] === "TRUE" || r[11] === "true",
+               expenseDescription: r[12] || "",
+               expenseAmount: r[13] ? parseFloat(r[13]) : undefined
             }));
       }
       return ContentService.createTextOutput(JSON.stringify({ success: true, data: { entries } })).setMimeType(ContentService.MimeType.JSON);
@@ -419,9 +436,9 @@ function doPost(e) {
     if (action === "EDIT_EMPLOYEE") {
       const usersSheet = ss.getSheetByName("Users");
       const existingData = usersSheet.getDataRange().getValues();
-      const id = payload.id;
+      const id = String(payload.id);
       for (let i = 1; i < existingData.length; i++) {
-        if (existingData[i][0] === id) {
+        if (String(existingData[i][0]) === id) {
           usersSheet.getRange(i + 1, 2).setValue(payload.name);
           usersSheet.getRange(i + 1, 3).setValue(payload.hourlyWage);
           return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
@@ -433,9 +450,9 @@ function doPost(e) {
     if (action === "DELETE_EMPLOYEE") {
       const usersSheet = ss.getSheetByName("Users");
       const existingData = usersSheet.getDataRange().getValues();
-      const id = payload.id;
+      const id = String(payload.id);
       for (let i = 1; i < existingData.length; i++) {
-        if (existingData[i][0] === id) {
+        if (String(existingData[i][0]) === id) {
           usersSheet.deleteRow(i + 1);
           return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
         }
@@ -561,7 +578,7 @@ function doPost(e) {
       const existingData = customersSheet.getDataRange().getValues();
       let deleted = false;
       for (let i = 1; i < existingData.length; i++) {
-        if (existingData[i][0] === payload.id) {
+        if (matchId(existingData[i][0], payload.id)) {
           customersSheet.deleteRow(i + 1);
           deleted = true;
           break;

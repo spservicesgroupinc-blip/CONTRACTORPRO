@@ -87,7 +87,7 @@ export const generatePayReport = (profile: UserProfile, timeEntries: TimeEntry[]
     doc.text(`Generated At: ${new Date().toLocaleString()}`, 120, startYInfo + 6);
     doc.text(`Period Covered: Active Logs`, 120, startYInfo + 12);
 
-    const tableColumn = ["Date", "Project / Job Site", "Clock In", "Clock Out", "Duration (hrs)", "Gross Pay ($)"];
+    const tableColumn = ["Date", "Project / Job Site", "Time / Item", "Clock Out", "Duration (hrs)", "Gross Pay ($)"];
     const tableRows: (string | number)[][] = [];
     
     let totalHours = 0;
@@ -96,20 +96,31 @@ export const generatePayReport = (profile: UserProfile, timeEntries: TimeEntry[]
     const sortedEntries = [...timeEntries].sort((a, b) => new Date(b.clockIn).getTime() - new Date(a.clockIn).getTime());
 
     sortedEntries.forEach(entry => {
-        const duration = calculateDuration(entry.clockIn, entry.clockOut);
-        const pay = duration * profile.hourlyWage;
-        totalHours += duration;
-        totalPay += pay;
-
-        const entryData = [
-            new Date(entry.clockIn).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }),
-            entry.projectName || 'General',
-            new Date(entry.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            entry.clockOut ? new Date(entry.clockOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Active Now',
-            duration.toFixed(2),
-            `$${pay.toFixed(2)}`
-        ];
-        tableRows.push(entryData);
+        if (entry.isExpense) {
+            totalPay += (entry.expenseAmount || 0);
+            tableRows.push([
+                new Date(entry.clockIn).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }),
+                entry.projectName || 'General',
+                'EXPENSE',
+                entry.expenseDescription || 'No description',
+                '-',
+                `$${(entry.expenseAmount || 0).toFixed(2)}`
+            ]);
+        } else {
+            const duration = calculateDuration(entry.clockIn, entry.clockOut);
+            const pay = duration * profile.hourlyWage;
+            totalHours += duration;
+            totalPay += pay;
+            const entryData = [
+                new Date(entry.clockIn).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }),
+                entry.projectName || 'General',
+                new Date(entry.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                entry.clockOut ? new Date(entry.clockOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Active Now',
+                duration.toFixed(2),
+                `$${pay.toFixed(2)}`
+            ];
+            tableRows.push(entryData);
+        }
     });
 
     autoTable(doc, {

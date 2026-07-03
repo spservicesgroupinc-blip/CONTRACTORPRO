@@ -1,3 +1,21 @@
+/**
+ * ProContractor - Google Apps Script Backend (Updated)
+ * 
+ * Instructions:
+ * 1. Create a new Google Spreadsheet (or use an existing one).
+ * 2. In the Google Spreadsheet, go to Extensions -> Apps Script.
+ * 3. Delete any default code in Code.gs and paste this entire code.
+ * 4. Click the "Save" (floppy disk) icon.
+ * 5. Click "Deploy" (top right) -> "New deployment".
+ * 6. Under "Select type", click the Gear icon and choose "Web app".
+ * 7. Set options:
+ *    - Description: "ProContractor Backend"
+ *    - Execute as: "Me" (your email)
+ *    - Who has access: "Anyone" (This is crucial, the proxy server will handle request forwarding).
+ * 8. Click "Deploy", approve any permissions requested, and COPY the generated Web App URL.
+ * 9. Save this URL in AI Studio Settings as: GOOGLE_APPS_SCRIPT_URL
+ */
+
 function setup() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   
@@ -41,8 +59,8 @@ function setup() {
   let chatSheet = ss.getSheetByName("ChatMessages");
   if (!chatSheet) {
     chatSheet = ss.insertSheet("ChatMessages");
-    chatSheet.appendRow(["Timestamp", "Sender ID", "Sender Name", "Message Text", "Status", "Message ID"]);
-    chatSheet.getRange("A1:F1").setFontWeight("bold");
+    chatSheet.appendRow(["Timestamp", "Sender ID", "Sender Name", "Message Text", "Status", "Message ID", "Photo URL"]);
+    chatSheet.getRange("A1:G1").setFontWeight("bold");
     chatSheet.setFrozenRows(1);
   }
 
@@ -128,8 +146,16 @@ function doPost(e) {
            timeSheet.getRange(i + 1, 3).setValue(updatedEntry.projectName || "");
            timeSheet.getRange(i + 1, 4).setValue(updatedEntry.clockIn || "");
            timeSheet.getRange(i + 1, 5).setValue(updatedEntry.clockOut || "");
-           timeSheet.getRange(i + 1, 6).setValue(updatedEntry.clockInLocation ? JSON.stringify(updatedEntry.clockInLocation) : "");
-           timeSheet.getRange(i + 1, 7).setValue(updatedEntry.clockOutLocation ? JSON.stringify(updatedEntry.clockOutLocation) : "");
+           timeSheet.getRange(i + 1, 6).setValue(updatedEntry.clockInLocation?.latitude || "");
+           timeSheet.getRange(i + 1, 7).setValue(updatedEntry.clockInLocation?.longitude || "");
+           timeSheet.getRange(i + 1, 8).setValue(updatedEntry.clockOutLocation?.latitude || "");
+           timeSheet.getRange(i + 1, 9).setValue(updatedEntry.clockOutLocation?.longitude || "");
+           if (updatedEntry.photos) {
+              timeSheet.getRange(i + 1, 10).setValue(JSON.stringify(updatedEntry.photos));
+           }
+           timeSheet.getRange(i + 1, 12).setValue(updatedEntry.isExpense ? "TRUE" : "FALSE");
+           timeSheet.getRange(i + 1, 13).setValue(updatedEntry.expenseDescription || "");
+           timeSheet.getRange(i + 1, 14).setValue(updatedEntry.expenseAmount !== undefined ? updatedEntry.expenseAmount : "");
            return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
         }
       }
@@ -185,6 +211,10 @@ function doPost(e) {
             timeSheet.getRange(rowIndex, 7).setValue(entry.clockInLocation?.longitude || "");
             timeSheet.getRange(rowIndex, 8).setValue(entry.clockOutLocation?.latitude || "");
             timeSheet.getRange(rowIndex, 9).setValue(entry.clockOutLocation?.longitude || "");
+            timeSheet.getRange(rowIndex, 10).setValue(entry.photos ? JSON.stringify(entry.photos) : "[]");
+            timeSheet.getRange(rowIndex, 12).setValue(entry.isExpense ? "TRUE" : "FALSE");
+            timeSheet.getRange(rowIndex, 13).setValue(entry.expenseDescription || "");
+            timeSheet.getRange(rowIndex, 14).setValue(entry.expenseAmount !== undefined ? entry.expenseAmount : "");
             
             existingIdsInPayload.add(rowId);
           }
@@ -212,7 +242,12 @@ function doPost(e) {
               entry.clockInLocation?.latitude || "",
               entry.clockInLocation?.longitude || "",
               entry.clockOutLocation?.latitude || "",
-              entry.clockOutLocation?.longitude || ""
+              entry.clockOutLocation?.longitude || "",
+              entry.photos ? JSON.stringify(entry.photos) : "[]",
+              "", // isBilled (defaults empty)
+              entry.isExpense ? "TRUE" : "FALSE",
+              entry.expenseDescription || "",
+              entry.expenseAmount !== undefined ? entry.expenseAmount : ""
             ]);
           }
         }
@@ -225,7 +260,7 @@ function doPost(e) {
       const existingData = usersSheet.getDataRange().getValues();
       let found = false;
       for (let i = 1; i < existingData.length; i++) {
-        if (existingData[i][0] === payload.id) {
+        if (matchId(existingData[i][0], payload.id)) {
           found = true;
           // Update wage and name
           usersSheet.getRange(i + 1, 2).setValue(payload.name);
@@ -269,7 +304,11 @@ function doPost(e) {
              clockOut: r[4],
              clockInLocation: r[5] ? { latitude: r[5], longitude: r[6] } : null,
              clockOutLocation: r[7] ? { latitude: r[7], longitude: r[8] } : null,
-             isBilled: r[9] === true || r[9] === "TRUE" || r[9] === "true" || r[9] === 1 || r[9] === "1"
+             photos: r[9] ? JSON.parse(r[9]) : [],
+             isBilled: r[10] === true || r[10] === "TRUE" || r[10] === "true" || r[10] === 1 || r[10] === "1",
+             isExpense: r[11] === true || r[11] === "TRUE" || r[11] === "true",
+             expenseDescription: r[12] || "",
+             expenseAmount: r[13] ? parseFloat(r[13]) : undefined
           }));
       }
 
@@ -314,7 +353,7 @@ function doPost(e) {
            }
         });
       }
-
+      
       return ContentService.createTextOutput(JSON.stringify({ success: true, data: { users, entries, invoices, projects, customers, companyInfo } })).setMimeType(ContentService.MimeType.JSON);
     }
     
@@ -376,7 +415,12 @@ function doPost(e) {
                clockIn: r[3],
                clockOut: r[4],
                clockInLocation: r[5] ? { latitude: r[5], longitude: r[6] } : null,
-               clockOutLocation: r[7] ? { latitude: r[7], longitude: r[8] } : null
+               clockOutLocation: r[7] ? { latitude: r[7], longitude: r[8] } : null,
+               photos: r[9] ? JSON.parse(r[9]) : [],
+               isBilled: r[10] === true || r[10] === "TRUE" || r[10] === "true" || r[10] === 1 || r[10] === "1",
+               isExpense: r[11] === true || r[11] === "TRUE" || r[11] === "true",
+               expenseDescription: r[12] || "",
+               expenseAmount: r[13] ? parseFloat(r[13]) : undefined
             }));
       }
       return ContentService.createTextOutput(JSON.stringify({ success: true, data: { entries } })).setMimeType(ContentService.MimeType.JSON);
@@ -392,9 +436,9 @@ function doPost(e) {
     if (action === "EDIT_EMPLOYEE") {
       const usersSheet = ss.getSheetByName("Users");
       const existingData = usersSheet.getDataRange().getValues();
-      const id = payload.id;
+      const id = String(payload.id);
       for (let i = 1; i < existingData.length; i++) {
-        if (existingData[i][0] === id) {
+        if (String(existingData[i][0]) === id) {
           usersSheet.getRange(i + 1, 2).setValue(payload.name);
           usersSheet.getRange(i + 1, 3).setValue(payload.hourlyWage);
           return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
@@ -406,9 +450,9 @@ function doPost(e) {
     if (action === "DELETE_EMPLOYEE") {
       const usersSheet = ss.getSheetByName("Users");
       const existingData = usersSheet.getDataRange().getValues();
-      const id = payload.id;
+      const id = String(payload.id);
       for (let i = 1; i < existingData.length; i++) {
-        if (existingData[i][0] === id) {
+        if (String(existingData[i][0]) === id) {
           usersSheet.deleteRow(i + 1);
           return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
         }
@@ -444,7 +488,7 @@ function doPost(e) {
         ]);
       }
       
-      // Auto-mark referenced time entries as billed (Col 10)
+      // Auto-mark referenced time entries as billed (Col 11)
       if (payload.timeEntryIds && payload.timeEntryIds.length > 0) {
         const timeSheet = ss.getSheetByName("TimeEntries");
         if (timeSheet) {
@@ -456,7 +500,7 @@ function doPost(e) {
           for (let i = 1; i < existingData.length; i++) {
             const rId = existingData[i][0];
             if (idMap[rId]) {
-              timeSheet.getRange(i + 1, 10).setValue(true);
+              timeSheet.getRange(i + 1, 11).setValue(true);
             }
           }
         }
@@ -480,7 +524,7 @@ function doPost(e) {
       for (let i = 1; i < existingData.length; i++) {
         const rId = existingData[i][0];
         if (idMap[rId]) {
-          timeSheet.getRange(i + 1, 10).setValue(statusValue);
+          timeSheet.getRange(i + 1, 11).setValue(statusValue);
         }
       }
       return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Updated billed status" })).setMimeType(ContentService.MimeType.JSON);
@@ -534,7 +578,7 @@ function doPost(e) {
       const existingData = customersSheet.getDataRange().getValues();
       let deleted = false;
       for (let i = 1; i < existingData.length; i++) {
-        if (existingData[i][0] === payload.id) {
+        if (matchId(existingData[i][0], payload.id)) {
           customersSheet.deleteRow(i + 1);
           deleted = true;
           break;

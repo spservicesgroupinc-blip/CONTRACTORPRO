@@ -64,6 +64,9 @@ const TimeLog: React.FC<TimeLogProps> = ({
     const [clockInVal, setClockInVal] = useState('');
     const [clockOutVal, setClockOutVal] = useState('');
     const [isLive, setIsLive] = useState(false);
+    const [isExpense, setIsExpense] = useState(false);
+    const [expenseDesc, setExpenseDesc] = useState('');
+    const [expenseAmt, setExpenseAmt] = useState('');
     const [formError, setFormError] = useState('');
     const [photos, setPhotos] = useState<string[]>([]);
     const [isUploading, setIsUploading] = useState(false);
@@ -136,6 +139,9 @@ const TimeLog: React.FC<TimeLogProps> = ({
         setClockOutVal(entry.clockOut ? formatToDatetimeLocal(entry.clockOut) : '');
         setIsLive(!entry.clockOut);
         setPhotos(entry.photos || []);
+        setIsExpense(entry.isExpense || false);
+        setExpenseDesc(entry.expenseDescription || '');
+        setExpenseAmt(entry.expenseAmount !== undefined ? entry.expenseAmount.toString() : '');
         setFormError('');
         setIsModalOpen(true);
     };
@@ -152,6 +158,26 @@ const TimeLog: React.FC<TimeLogProps> = ({
         setClockOutVal(formatToDatetimeLocal(now.toISOString()));
         setIsLive(false);
         setPhotos([]);
+        setIsExpense(false);
+        setExpenseDesc('');
+        setExpenseAmt('');
+        setFormError('');
+        setIsModalOpen(true);
+    };
+
+    const handleOpenAddExpenseModal = () => {
+        setModalMode('add');
+        setEditingEntryId(null);
+        setSelectedProjectName(projects[0] || 'General');
+        
+        const now = new Date();
+        setClockInVal(formatToDatetimeLocal(now.toISOString()));
+        setClockOutVal(formatToDatetimeLocal(now.toISOString()));
+        setIsLive(false);
+        setPhotos([]);
+        setIsExpense(true);
+        setExpenseDesc('');
+        setExpenseAmt('');
         setFormError('');
         setIsModalOpen(true);
     };
@@ -168,7 +194,7 @@ const TimeLog: React.FC<TimeLogProps> = ({
         const inDate = new Date(clockInVal);
         let outDate: Date | null = null;
         
-        if (!isLive) {
+        if (!isLive && !isExpense) {
             if (!clockOutVal) {
                 setFormError('Clock-out time is required if not currently active.');
                 return;
@@ -179,6 +205,17 @@ const TimeLog: React.FC<TimeLogProps> = ({
                 return;
             }
         }
+
+        if (isExpense) {
+            if (!expenseDesc.trim()) {
+                setFormError('Description is required for expenses.');
+                return;
+            }
+            if (isNaN(parseFloat(expenseAmt))) {
+                setFormError('A valid amount is required for expenses.');
+                return;
+            }
+        }
         
         const existingEntry = modalMode === 'edit' && editingEntryId ? timeEntries.find(e => e.id === editingEntryId) : null;
 
@@ -186,8 +223,11 @@ const TimeLog: React.FC<TimeLogProps> = ({
             id: modalMode === 'edit' && editingEntryId ? editingEntryId : `entry_${Date.now()}`,
             projectName: selectedProjectName,
             clockIn: inDate.toISOString(),
-            clockOut: isLive ? undefined : (outDate ? outDate.toISOString() : undefined),
+            clockOut: (isLive || isExpense) ? undefined : (outDate ? outDate.toISOString() : undefined),
             photos: photos,
+            isExpense: isExpense,
+            expenseDescription: isExpense ? expenseDesc.trim() : undefined,
+            expenseAmount: isExpense ? parseFloat(expenseAmt) : undefined,
             // Maintain locations and breaks if editing and they exist
             ...(existingEntry ? {
                 clockInLocation: existingEntry.clockInLocation,
@@ -221,13 +261,22 @@ const TimeLog: React.FC<TimeLogProps> = ({
                 <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
                     Recorded Logs
                 </span>
-                <button
-                    onClick={handleOpenAddModal}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#2563eb] font-extrabold text-xs rounded-xl transition-all cursor-pointer shadow-sm"
-                >
-                    <Plus className="w-3.5 h-3.5" />
-                    Add Manual Log
-                </button>
+                <div className="flex gap-2">
+                    <button
+                        onClick={handleOpenAddExpenseModal}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-green-50 hover:bg-green-100 text-green-700 font-extrabold text-xs rounded-xl transition-all cursor-pointer shadow-sm"
+                    >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add Expense
+                    </button>
+                    <button
+                        onClick={handleOpenAddModal}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#2563eb] font-extrabold text-xs rounded-xl transition-all cursor-pointer shadow-sm"
+                    >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add Time
+                    </button>
+                </div>
             </div>
 
             <div className="p-5">
@@ -268,30 +317,37 @@ const TimeLog: React.FC<TimeLogProps> = ({
                                             </button>
                                             <div className="text-right ml-2">
                                                 <p className="font-extrabold text-[#101726] text-lg leading-none">
-                                                    {entry.clockOut ? `${duration.toFixed(2)}h` : 'LIVE'}
+                                                    {entry.isExpense ? 'EXPENSE' : (entry.clockOut ? `${duration.toFixed(2)}h` : 'LIVE')}
                                                 </p>
                                                 <p className="text-xs font-bold text-[#10b981] mt-1">
-                                                    {pay > 0 ? `$${pay.toFixed(2)}` : ''}
+                                                    {entry.isExpense ? `$${(entry.expenseAmount || 0).toFixed(2)}` : (pay > 0 ? `$${pay.toFixed(2)}` : '')}
                                                 </p>
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="flex flex-col sm:flex-row gap-4 w-full">
-                                        <div className="flex-1">
-                                            <LocationMap 
-                                                type="In" 
-                                                time={new Date(entry.clockIn).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} 
-                                                location={entry.clockInLocation} 
-                                            />
+
+                                    {entry.isExpense ? (
+                                        <div className="text-sm font-semibold text-gray-700 bg-gray-50 px-3 py-2 rounded-xl border border-gray-100">
+                                            {entry.expenseDescription || 'No description provided'}
                                         </div>
-                                        <div className="flex-1">
-                                            <LocationMap 
-                                                type="Out" 
-                                                time={entry.clockOut ? new Date(entry.clockOut).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Still working...'} 
-                                                location={entry.clockOutLocation} 
-                                            />
+                                    ) : (
+                                        <div className="flex flex-col sm:flex-row gap-4 w-full">
+                                            <div className="flex-1">
+                                                <LocationMap 
+                                                    type="In" 
+                                                    time={new Date(entry.clockIn).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} 
+                                                    location={entry.clockInLocation} 
+                                                />
+                                            </div>
+                                            <div className="flex-1">
+                                                <LocationMap 
+                                                    type="Out" 
+                                                    time={entry.clockOut ? new Date(entry.clockOut).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Still working...'} 
+                                                    location={entry.clockOutLocation} 
+                                                />
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
                                     
                                     {entry.breaks && entry.breaks.length > 0 && (
                                         <div className="mt-2 text-xs font-semibold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-100 flex items-center gap-1.5 w-fit">
@@ -333,7 +389,7 @@ const TimeLog: React.FC<TimeLogProps> = ({
                     <div className="relative bg-white w-full max-w-sm rounded-3xl shadow-2xl border border-gray-100 p-6 z-10 animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
                         <div className="flex justify-between items-center mb-4 shrink-0 pb-3 border-b border-gray-100">
                             <h3 className="font-extrabold text-gray-950 text-base">
-                                {modalMode === 'edit' ? 'Edit Time Log' : 'Add Manual Log'}
+                                {modalMode === 'edit' ? (isExpense ? 'Edit Expense' : 'Edit Time Log') : (isExpense ? 'Add Expense' : 'Add Manual Log')}
                             </h3>
                             <button 
                                 onClick={() => setIsModalOpen(false)}
@@ -368,45 +424,91 @@ const TimeLog: React.FC<TimeLogProps> = ({
                                 </select>
                             </div>
 
-                            <div>
-                                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
-                                    Clock In Date & Time
-                                </label>
-                                <input 
-                                    type="datetime-local"
-                                    required
-                                    value={clockInVal}
-                                    onChange={(e) => setClockInVal(e.target.value)}
-                                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:bg-white focus:ring-2 focus:ring-[#2563eb] transition-all cursor-pointer"
-                                />
-                            </div>
+                            {isExpense ? (
+                                <>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                                            Date
+                                        </label>
+                                        <input 
+                                            type="datetime-local"
+                                            required
+                                            value={clockInVal}
+                                            onChange={(e) => setClockInVal(e.target.value)}
+                                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:bg-white focus:ring-2 focus:ring-[#2563eb] transition-all cursor-pointer"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                                            Description
+                                        </label>
+                                        <input 
+                                            type="text"
+                                            required
+                                            placeholder="e.g. Materials, Fuel, etc."
+                                            value={expenseDesc}
+                                            onChange={(e) => setExpenseDesc(e.target.value)}
+                                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:bg-white focus:ring-2 focus:ring-[#2563eb] transition-all cursor-pointer"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                                            Amount ($)
+                                        </label>
+                                        <input 
+                                            type="number"
+                                            required
+                                            step="0.01"
+                                            placeholder="0.00"
+                                            value={expenseAmt}
+                                            onChange={(e) => setExpenseAmt(e.target.value)}
+                                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:bg-white focus:ring-2 focus:ring-[#2563eb] transition-all cursor-pointer"
+                                        />
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                                            Clock In Date & Time
+                                        </label>
+                                        <input 
+                                            type="datetime-local"
+                                            required
+                                            value={clockInVal}
+                                            onChange={(e) => setClockInVal(e.target.value)}
+                                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:bg-white focus:ring-2 focus:ring-[#2563eb] transition-all cursor-pointer"
+                                        />
+                                    </div>
 
-                            <div className="flex items-center gap-2 py-1">
-                                <input 
-                                    type="checkbox"
-                                    id="isLive"
-                                    checked={isLive}
-                                    onChange={(e) => setIsLive(e.target.checked)}
-                                    className="w-4.5 h-4.5 text-[#2563eb] rounded border-gray-300 focus:ring-[#2563eb] cursor-pointer"
-                                />
-                                <label htmlFor="isLive" className="text-xs font-bold text-gray-700 cursor-pointer select-none">
-                                    Active / Currently clocked-in (Live)
-                                </label>
-                            </div>
+                                    <div className="flex items-center gap-2 py-1">
+                                        <input 
+                                            type="checkbox"
+                                            id="isLive"
+                                            checked={isLive}
+                                            onChange={(e) => setIsLive(e.target.checked)}
+                                            className="w-4.5 h-4.5 text-[#2563eb] rounded border-gray-300 focus:ring-[#2563eb] cursor-pointer"
+                                        />
+                                        <label htmlFor="isLive" className="text-xs font-bold text-gray-700 cursor-pointer select-none">
+                                            Active / Currently clocked-in (Live)
+                                        </label>
+                                    </div>
 
-                            {!isLive && (
-                                <div>
-                                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
-                                        Clock Out Date & Time
-                                    </label>
-                                    <input 
-                                        type="datetime-local"
-                                        required={!isLive}
-                                        value={clockOutVal}
-                                        onChange={(e) => setClockOutVal(e.target.value)}
-                                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:bg-white focus:ring-2 focus:ring-[#2563eb] transition-all cursor-pointer"
-                                    />
-                                </div>
+                                    {!isLive && (
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                                                Clock Out Date & Time
+                                            </label>
+                                            <input 
+                                                type="datetime-local"
+                                                required={!isLive}
+                                                value={clockOutVal}
+                                                onChange={(e) => setClockOutVal(e.target.value)}
+                                                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:bg-white focus:ring-2 focus:ring-[#2563eb] transition-all cursor-pointer"
+                                            />
+                                        </div>
+                                    )}
+                                </>
                             )}
 
                             <div>

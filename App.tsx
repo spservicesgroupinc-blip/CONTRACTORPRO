@@ -566,12 +566,18 @@ const App: React.FC = () => {
 
     const paylogTotals = useMemo(() => {
         let hours = 0;
+        let expenses = 0;
         filteredPaylogEntries.forEach(entry => {
-            hours += getEntryDuration(entry, now.getTime());
+            if (entry.isExpense) {
+                expenses += (entry.expenseAmount || 0);
+            } else {
+                hours += getEntryDuration(entry, now.getTime());
+            }
         });
         return {
             hours,
-            earnings: hours * (profile?.hourlyWage || 0)
+            expenses,
+            earnings: (hours * (profile?.hourlyWage || 0)) + expenses
         };
     }, [filteredPaylogEntries, profile, now]);
 
@@ -580,18 +586,22 @@ const App: React.FC = () => {
         const startOfWeek = new Date();
         startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
         startOfWeek.setHours(0,0,0,0);
-
         let hours = 0;
+        let expenses = 0;
         timeEntries.forEach(entry => {
             const inTime = new Date(entry.clockIn);
             if (inTime >= startOfWeek) {
-                hours += getEntryDuration(entry, now.getTime());
+                if (entry.isExpense) {
+                    expenses += (entry.expenseAmount || 0);
+                } else {
+                    hours += getEntryDuration(entry, now.getTime());
+                }
             }
         });
         
         return {
             weeklyHours: hours,
-            weeklyEarnings: hours * (profile?.hourlyWage || 0)
+            weeklyEarnings: (hours * (profile?.hourlyWage || 0)) + expenses
         };
     }, [timeEntries, now, profile]);
 
@@ -774,6 +784,7 @@ const App: React.FC = () => {
                 currentTab={currentTab} 
                 setCurrentTab={setCurrentTab} 
                 onLogout={handleLogout}
+                unreadChatCount={unreadChatCount}
             />
             <div className="w-full max-w-md mx-auto relative flex flex-col h-full overflow-hidden">
                 
@@ -1344,6 +1355,7 @@ const App: React.FC = () => {
                     setCurrentTab={setCurrentTab} 
                     onFabClick={() => setIsSlideUpOpen(true)}
                     onMenuClick={() => setIsSidebarOpen(true)}
+                    unreadChatCount={unreadChatCount}
                 />
 
                 {/* BACKDROP FOR SLIDE-UP ACTIONS */}

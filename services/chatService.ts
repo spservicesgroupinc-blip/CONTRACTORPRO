@@ -288,6 +288,32 @@ class ChatService {
     }
   }
 
+  private playNotificationSound() {
+    try {
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(600, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.1);
+      
+      gainNode.gain.setValueAtTime(0, ctx.currentTime);
+      gainNode.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+      
+      osc.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      
+      osc.start();
+      osc.stop(ctx.currentTime + 0.3);
+    } catch (e) {
+      console.warn("Unable to play notification sound", e);
+    }
+  }
+
   private triggerNotification(msg: ChatMessage) {
     if (!("Notification" in window)) return;
     
@@ -361,6 +387,7 @@ class ChatService {
           // We can use lastReadTimestamp to gauge if we should notify
           const msgTime = new Date(incMsg.timestamp).getTime();
           if (msgTime > this.lastReadTimestamp) {
+            this.playNotificationSound();
             this.triggerNotification(incMsg);
           }
         }
