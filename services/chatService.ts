@@ -296,8 +296,26 @@ class ChatService {
 
     if (Notification.permission === "granted") {
       try {
+        let notificationBody = msg.messageText || '';
+        
+        if (notificationBody.includes('[PHOTO_URL]:')) {
+          const parts = notificationBody.split('[PHOTO_URL]:');
+          const textPart = parts[0].trim();
+          if (textPart) {
+            notificationBody = `${textPart} (sent a photo)`;
+          } else {
+            notificationBody = 'Sent a photo';
+          }
+        } else if (msg.photoUrl) {
+          if (notificationBody) {
+             notificationBody += ' (sent a photo)';
+          } else {
+             notificationBody = 'Sent a photo';
+          }
+        }
+
         const notification = new Notification(`New message from ${msg.senderName}`, {
-          body: msg.messageText,
+          body: notificationBody,
           icon: '/pwa-icon.svg',
           badge: '/pwa-icon.svg',
           tag: 'chat-message'

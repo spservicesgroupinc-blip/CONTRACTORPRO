@@ -34,11 +34,35 @@ export const Messaging: React.FC<MessagingProps> = ({ profile }) => {
   }, []);
 
   // Scroll to bottom of chat list container when messages update
-  useEffect(() => {
+  const scrollToBottom = (smooth = true) => {
     if (listRef.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight;
+      listRef.current.scrollTo({
+        top: listRef.current.scrollHeight,
+        behavior: smooth ? 'smooth' : 'auto'
+      });
+    }
+  };
+
+  useEffect(() => {
+    // Initial load: instant scroll
+    if (messages.length > 0 && !listRef.current?.scrollTop) {
+      scrollToBottom(false);
+    } else {
+      scrollToBottom(true);
     }
   }, [messages]);
+
+  useEffect(() => {
+    const resizeObserver = new ResizeObserver(() => {
+      scrollToBottom(false);
+    });
+    
+    if (listRef.current) {
+      resizeObserver.observe(listRef.current);
+    }
+    
+    return () => resizeObserver.disconnect();
+  }, []);
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -165,6 +189,7 @@ export const Messaging: React.FC<MessagingProps> = ({ profile }) => {
                               loading="lazy"
                               referrerPolicy="no-referrer"
                               onClick={() => window.open(getDirectImageUrl(displayPhotoUrl!), '_blank')}
+                              onLoad={() => scrollToBottom()}
                             />
                           </div>
                         )}
@@ -225,12 +250,12 @@ export const Messaging: React.FC<MessagingProps> = ({ profile }) => {
         )}
 
         {showEmojiPicker && (
-          <div className="absolute bottom-full right-4 mb-2 shadow-xl rounded-xl overflow-hidden animate-in slide-in-from-bottom-4 z-50">
+          <div className="absolute bottom-full right-2 sm:right-4 mb-2 shadow-xl rounded-xl overflow-hidden animate-in slide-in-from-bottom-4 z-50 max-w-[calc(100vw-24px)]">
             <EmojiPicker 
               onEmojiClick={onEmojiClick} 
               autoFocusSearch={false}
               skinTonesDisabled
-              width={300}
+              width={Math.min(320, window.innerWidth - 32)}
               height={350}
             />
           </div>
