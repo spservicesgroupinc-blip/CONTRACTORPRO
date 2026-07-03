@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile, ChatMessage } from '../types';
 import { chatService } from '../services/chatService';
-import { Send, Loader2, MessageSquare, RefreshCw } from 'lucide-react';
+import { Send, Loader2, MessageSquare, RefreshCw, Image as ImageIcon, Smile, X } from 'lucide-react';
+import { compressAndEncodeBase64, getDirectImageUrl } from '../photoUtils';
+import EmojiPicker from 'emoji-picker-react';
 
 interface MessagingProps {
   profile: UserProfile;
@@ -10,7 +12,11 @@ interface MessagingProps {
 export const Messaging: React.FC<MessagingProps> = ({ profile }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Subscribe to messages and polling setup
   useEffect(() => {
@@ -34,13 +40,62 @@ export const Messaging: React.FC<MessagingProps> = ({ profile }) => {
     }
   }, [messages]);
 
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploading(true);
+      const base64Str = await compressAndEncodeBase64(file);
+      const response = await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          payload: {
+            action: 'UPLOAD_PHOTO',
+            payload: {
+              base64: base64Str,
+              mimeType: file.type,
+              filename: file.name
+            }
+          }
+        })
+      });
+
+      if (!response.ok) throw new Error('Upload failed');
+      const result = await response.json();
+      if (result.success && result.data?.downloadUrl) {
+        setSelectedPhoto(result.data.downloadUrl);
+      } else {
+        throw new Error('No url returned');
+      }
+    } catch (err) {
+      console.error('Failed to upload photo', err);
+      alert('Failed to upload photo.');
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim()) return;
+    if (!inputText.trim() && !selectedPhoto) return;
     const msg = inputText.trim();
+    const photo = selectedPhoto;
+    
     setInputText('');
+    setSelectedPhoto(null);
+    setShowEmojiPicker(false);
     chatService.requestNotificationPermission(); // Request on user gesture
-    await chatService.sendMessage(msg, profile.id || '', profile.name || 'User');
+    
+    await chatService.sendMessage(msg, profile.id || '', profile.name || 'User', photo || undefined);
+  };
+
+  const onEmojiClick = (emojiObject: any) => {
+    setInputText(prev => prev + emojiObject.emoji);
   };
 
   const handleRetryMessage = (msgId: string) => {
@@ -84,7 +139,19 @@ export const Messaging: React.FC<MessagingProps> = ({ profile }) => {
                       : 'bg-white text-gray-800 border border-gray-200 rounded-2xl rounded-bl-none mr-auto'
                   }`}
                 >
-                  <p className="whitespace-pre-line">{msg.messageText}</p>
+                  {msg.photoUrl && (
+                    <div className="mb-2 -mx-1">
+                      <img 
+                        src={getDirectImageUrl(msg.photoUrl)} 
+                        alt="Shared image" 
+                        className="rounded-xl w-full max-w-[240px] max-h-[300px] object-cover cursor-pointer hover:opacity-90 transition-opacity bg-black/5" 
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        onClick={() => window.open(getDirectImageUrl(msg.photoUrl!), '_blank')}
+                      />
+                    </div>
+                  )}
+                  {msg.messageText && <p className="whitespace-pre-line">{msg.messageText}</p>}
                   
                   <div className="flex items-center justify-end gap-1.5 mt-1 text-[10px]">
                     <span className={isMe ? 'text-blue-200/90' : 'text-gray-400'}>
@@ -120,24 +187,82 @@ export const Messaging: React.FC<MessagingProps> = ({ profile }) => {
       </div>
 
       {/* Input Deck */}
-      <div className="p-4 bg-white border-t border-gray-200 shrink-0 relative z-30" id="chat_input_deck">
-        <form onSubmit={handleSend} className="relative flex items-center" id="chat_form">
-          <input 
-            type="text"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            placeholder="Type a message to the team..."
-            className="w-full pl-4 pr-12 py-3 bg-gray-100 border-0 rounded-full focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors text-sm text-gray-800"
-            id="chat_input_field"
+      <div className="p-3 bg-white border-t border-gray-200 shrink-0 relative z-30 flex flex-col" id="chat_input_deck">
+        {selectedPhoto && (
+          <div className="relative mb-3 self-start animate-in slide-in-from-bottom-2">
+            <img 
+              src={selectedPhoto} 
+              alt="Preview" 
+              className="h-20 w-auto rounded-lg shadow-sm border border-gray-200 object-cover" 
+            />
+            <button 
+              onClick={() => setSelectedPhoto(null)}
+              className="absolute -top-2 -right-2 bg-gray-800 text-white rounded-full p-1 shadow-md hover:bg-gray-700"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {showEmojiPicker && (
+          <div className="absolute bottom-full right-4 mb-2 shadow-xl rounded-xl overflow-hidden animate-in slide-in-from-bottom-4 z-50">
+            <EmojiPicker 
+              onEmojiClick={onEmojiClick} 
+              autoFocusSearch={false}
+              skinTonesDisabled
+              width={300}
+              height={350}
+            />
+          </div>
+        )}
+
+        <form onSubmit={handleSend} className="relative flex items-end gap-2" id="chat_form">
+          <input
+            type="file"
+            accept="image/*"
+            ref={fileInputRef}
+            onChange={handlePhotoUpload}
+            className="hidden"
           />
-          <button 
-            type="submit"
-            disabled={!inputText.trim()}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:bg-gray-300 transition-colors"
-            id="chat_send_btn"
+          
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+            className="p-3 text-gray-500 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0 relative"
+            title="Upload photo"
           >
-            <Send className="w-4 h-4" />
+            {isUploading ? <Loader2 className="w-5 h-5 animate-spin text-blue-500" /> : <ImageIcon className="w-5 h-5" />}
           </button>
+          
+          <button
+            type="button"
+            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            className={`p-3 rounded-full transition-colors flex-shrink-0 ${showEmojiPicker ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+            title="Add emoji"
+          >
+            <Smile className="w-5 h-5" />
+          </button>
+
+          <div className="relative flex-1">
+            <input 
+              type="text"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder="Type a message to the team..."
+              className="w-full pl-4 pr-12 py-3.5 bg-gray-100 border-0 rounded-full focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors text-sm text-gray-800"
+              id="chat_input_field"
+              autoComplete="off"
+            />
+            <button 
+              type="submit"
+              disabled={(!inputText.trim() && !selectedPhoto) || isUploading}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-50 transition-colors shadow-sm"
+              id="chat_send_btn"
+            >
+              <Send className="w-4 h-4 ml-0.5" />
+            </button>
+          </div>
         </form>
       </div>
 

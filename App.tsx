@@ -83,6 +83,7 @@ const App: React.FC = () => {
     const [checkedReviewIndexes, setCheckedReviewIndexes] = useState<number[]>([]);
 
     // Quick Task state
+    const [autoEditEntryId, setAutoEditEntryId] = useState<string | null>(null);
     const [isNewTaskPopupOpen, setIsNewTaskPopupOpen] = useState(false);
     const [quickTaskTitle, setQuickTaskTitle] = useState('');
     const [quickTaskPriority, setQuickTaskPriority] = useState<'high' | 'medium' | 'low'>('medium');
@@ -918,10 +919,18 @@ const App: React.FC = () => {
                        {isClockedIn && (
                            <div className="text-center mt-2 mb-4 px-6 z-10">
                                <span className="text-xs font-semibold text-gray-400">Active Job:</span>
-                               <div>
-                                   <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-[#2563eb] font-bold text-xs rounded-full border border-blue-100 mt-1 uppercase">
+                               <div className="mt-1">
+                                   <button 
+                                       onClick={() => {
+                                           const activeProj = timeEntries[timeEntries.length - 1]?.projectName || 'General';
+                                           setSelectedTaskProjectFilter(activeProj);
+                                           setCurrentTab('tasks');
+                                       }}
+                                       className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 hover:bg-blue-100 text-[#2563eb] font-bold text-xs rounded-full border border-blue-100 uppercase transition-all cursor-pointer hover:scale-105 active:scale-95 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#2563eb]"
+                                   >
                                        💼 {timeEntries[timeEntries.length - 1]?.projectName || 'General'}
-                                   </span>
+                                       <ChevronRight className="w-3.5 h-3.5 text-[#2563eb]" />
+                                   </button>
                                </div>
                            </div>
                        )}
@@ -931,39 +940,50 @@ const App: React.FC = () => {
                     <div className="px-5 mt-8 z-10 flex-1 flex flex-col gap-6">
                         
                         <div className="flex gap-4">
-                            {/* This Week Card */}
-                            <div className="flex-1 bg-blue-950 rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between">
-                                <div className="flex items-center justify-between mb-4">
-                                    <div className="flex items-center gap-2 text-gray-300 text-xs font-bold tracking-wide">
+                            {/* This Week Card - Clickable Link */}
+                            <button 
+                                onClick={() => setCurrentTab('paylog')}
+                                className="flex-1 text-left bg-blue-950 rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all group border border-blue-900 focus:outline-none focus:ring-2 focus:ring-[#2563eb]"
+                            >
+                                <div className="flex items-center justify-between mb-4 w-full">
+                                    <div className="flex items-center gap-2 text-gray-300 text-xs font-bold tracking-wide group-hover:text-white transition-colors">
                                         <Clock className="w-4 h-4" />
                                         <span>THIS WEEK</span>
                                     </div>
-                                    <div className="bg-gray-700/50 p-2 rounded-xl text-gray-300">
+                                    <div className="bg-gray-700/50 p-2 rounded-xl text-gray-300 group-hover:bg-gray-600/50 group-hover:text-white transition-all">
                                        <FileText className="w-4 h-4" />
                                     </div>
                                 </div>
                                 <div className="flex items-baseline gap-1 mt-auto">
-                                    <span className="text-4xl font-extrabold text-white tracking-tight">
+                                    <span className="text-4xl font-extrabold text-white tracking-tight flex items-center gap-1">
                                         {weeklyHours.toFixed(2)}
+                                        <ChevronRight className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity translate-x-[-4px] group-hover:translate-x-0 transition-all duration-250" />
                                     </span>
                                     <span className="text-gray-400 font-medium">hrs</span>
                                 </div>
-                            </div>
+                            </button>
 
-                            {/* Earnings Card */}
-                            <div className="flex-1 bg-[#2563eb] rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between">
-                                <div className="flex items-center justify-between mb-4">
-                                    <div className="flex items-center gap-2 text-blue-100 text-xs font-bold tracking-wide">
+                            {/* Earnings Card - Clickable Link */}
+                            <button 
+                                onClick={() => setCurrentTab('paylog')}
+                                className="flex-1 text-left bg-[#2563eb] rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all group border border-blue-500 focus:outline-none focus:ring-2 focus:ring-[#2563eb]"
+                            >
+                                <div className="flex items-center justify-between mb-4 w-full">
+                                    <div className="flex items-center gap-2 text-blue-100 text-xs font-bold tracking-wide group-hover:text-white transition-colors">
                                         <DollarSign className="w-4 h-4" />
                                         <span>EARNINGS</span>
                                     </div>
+                                    <div className="bg-blue-400/30 p-2 rounded-xl text-blue-100 group-hover:bg-blue-400/50 group-hover:text-white transition-all">
+                                       <Wallet className="w-4 h-4" />
+                                    </div>
                                 </div>
                                 <div className="flex items-baseline mt-auto">
-                                    <span className="text-4xl font-extrabold text-white tracking-tight">
+                                    <span className="text-4xl font-extrabold text-white tracking-tight flex items-center gap-1">
                                         ${weeklyEarnings.toFixed(2)}
+                                        <ChevronRight className="w-4 h-4 text-blue-200 opacity-0 group-hover:opacity-100 transition-opacity translate-x-[-4px] group-hover:translate-x-0 transition-all duration-250" />
                                     </span>
                                 </div>
-                            </div>
+                            </button>
                         </div>
 
                         {/* Recent Activity */}
@@ -972,28 +992,50 @@ const App: React.FC = () => {
                                 <h3 className="font-bold text-gray-800 text-[15px]">Recent Activity</h3>
                                 <span className="text-gray-400 text-xs font-medium">Last 7 Days</span>
                             </div>
-                            <div className="p-8 flex justify-center items-center">
+                            <div className="p-4 flex flex-col justify-center items-center">
                                 {timeEntries.length > 0 ? (
-                                    <ul className="w-full space-y-4">
+                                    <ul className="w-full space-y-1">
                                         {timeEntries.slice(-3).reverse().map((entry, idx) => (
-                                            <li key={`${entry.id || 'recent'}_${idx}`} className="flex justify-between items-center border-b border-gray-50 pb-2 last:border-0 last:pb-0">
-                                                <div className="flex flex-col">
-                                                    <span className="text-sm font-semibold text-gray-700">{new Date(entry.clockIn).toLocaleDateString()}</span>
-                                                    <span className="text-xs text-gray-400">
+                                            <li 
+                                                key={`${entry.id || 'recent'}_${idx}`} 
+                                                onClick={() => {
+                                                    setCurrentTab('paylog');
+                                                    setAutoEditEntryId(entry.id);
+                                                }}
+                                                className="flex justify-between items-center border-b border-gray-50/50 pb-2.5 pt-2.5 px-3.5 rounded-xl cursor-pointer hover:bg-slate-50 transition-all active:scale-[0.99] group last:border-0"
+                                            >
+                                                <div className="flex flex-col min-w-0">
+                                                    <span className="text-sm font-semibold text-gray-700 flex items-center gap-1 group-hover:text-[#2563eb] transition-colors">
+                                                        {new Date(entry.clockIn).toLocaleDateString()}
+                                                        <ChevronRight className="w-3.5 h-3.5 text-gray-400 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-x-[-3px] group-hover:translate-x-0" />
+                                                    </span>
+                                                    <span className="text-xs text-gray-400 mt-0.5">
                                                         {new Date(entry.clockIn).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - 
                                                         {entry.clockOut ? new Date(entry.clockOut).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ' Now'}
                                                     </span>
+                                                    <span className="text-[9px] text-gray-400 font-bold mt-1 uppercase tracking-wide flex items-center gap-1">
+                                                        💼 {entry.projectName || 'General'}
+                                                    </span>
                                                 </div>
-                                                <div className="text-sm font-bold text-gray-600">
-                                                    {entry.clockOut 
-                                                        ? (getEntryDuration(entry, now.getTime()).toFixed(2) + 'h')
-                                                        : '...'}
+                                                <div className="text-right flex flex-col items-end shrink-0 pl-3">
+                                                    <span className="text-sm font-extrabold text-gray-800">
+                                                        {entry.clockOut 
+                                                            ? (getEntryDuration(entry, now.getTime()).toFixed(2) + 'h')
+                                                            : <span className="inline-flex items-center text-[8px] font-black bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded uppercase animate-pulse border border-emerald-100">Live</span>}
+                                                    </span>
+                                                    {entry.clockOut && (
+                                                        <span className="text-xs font-bold text-emerald-600 mt-0.5">
+                                                            ${(getEntryDuration(entry, now.getTime()) * (profile?.hourlyWage || 0)).toFixed(2)}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </li>
                                         ))}
                                     </ul>
                                 ) : (
-                                    <p className="text-gray-400 italic text-sm text-center">No time entries recorded yet.</p>
+                                    <div className="p-4 text-center">
+                                        <p className="text-gray-400 italic text-sm">No time entries recorded yet.</p>
+                                    </div>
                                 )}
                             </div>
                         </div>
@@ -1245,6 +1287,8 @@ const App: React.FC = () => {
                                 onUpdateEntry={handleUpdateTimeEntry}
                                 onDeleteEntry={handleDeleteTimeEntry}
                                 onAddEntry={handleAddTimeEntry}
+                                autoEditEntryId={autoEditEntryId}
+                                onClearAutoEdit={() => setAutoEditEntryId(null)}
                             />
                         </div>
                     </div>

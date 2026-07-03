@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { TimeEntry, UserProfile } from '../types';
 import { Edit2, Trash2, Plus, X, Calendar, Clock, AlertCircle, Check, Camera, Loader2, Image as ImageIcon } from 'lucide-react';
 import { compressAndEncodeBase64, getDirectImageUrl } from '../photoUtils';
@@ -10,6 +10,8 @@ interface TimeLogProps {
   onUpdateEntry: (entry: TimeEntry) => void;
   onDeleteEntry: (id: string) => void;
   onAddEntry: (entry: TimeEntry) => void;
+  autoEditEntryId?: string | null;
+  onClearAutoEdit?: () => void;
 }
 
 const formatToDatetimeLocal = (isoString?: string): string => {
@@ -49,7 +51,9 @@ const TimeLog: React.FC<TimeLogProps> = ({
     projects = ['General'], 
     onUpdateEntry, 
     onDeleteEntry, 
-    onAddEntry 
+    onAddEntry,
+    autoEditEntryId,
+    onClearAutoEdit
 }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
@@ -64,6 +68,19 @@ const TimeLog: React.FC<TimeLogProps> = ({
     const [photos, setPhotos] = useState<string[]>([]);
     const [isUploading, setIsUploading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Auto-edit hook to trigger edit modal based on external selection (e.g. from Recent Activity)
+    useEffect(() => {
+        if (autoEditEntryId) {
+            const entry = timeEntries.find(e => e.id === autoEditEntryId);
+            if (entry) {
+                handleOpenEditModal(entry);
+            }
+            if (onClearAutoEdit) {
+                onClearAutoEdit();
+            }
+        }
+    }, [autoEditEntryId, timeEntries]);
 
     const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];

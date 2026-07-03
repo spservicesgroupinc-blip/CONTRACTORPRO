@@ -62,6 +62,7 @@ export interface ChatMessage {
   senderId: string;
   senderName: string;
   messageText: string;
+  photoUrl?: string;
   timestamp: string; // ISO string
   status: 'pending' | 'sent' | 'failed';
 }

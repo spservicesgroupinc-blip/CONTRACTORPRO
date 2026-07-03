@@ -116,9 +116,9 @@ class ChatService {
   }
 
   // OPTIMISTIC STATE ENGINE: Send a message
-  public async sendMessage(text: string, senderId: string, senderName: string) {
+  public async sendMessage(text: string, senderId: string, senderName: string, photoUrl?: string) {
     const messageText = text.trim();
-    if (!messageText) return;
+    if (!messageText && !photoUrl) return;
 
     const messageId = crypto.randomUUID();
     const optimisticMessage: ChatMessage = {
@@ -126,6 +126,7 @@ class ChatService {
       senderId,
       senderName,
       messageText,
+      photoUrl,
       timestamp: new Date().toISOString(),
       status: 'pending'
     };
@@ -152,6 +153,7 @@ class ChatService {
               senderId: message.senderId,
               senderName: message.senderName,
               messageText: message.messageText,
+              photoUrl: message.photoUrl,
               status: 'sent', // The sheet receives it as sent
               messageId: message.messageId
             }
