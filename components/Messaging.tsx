@@ -64,8 +64,10 @@ export const Messaging: React.FC<MessagingProps> = ({ profile }) => {
 
       if (!response.ok) throw new Error('Upload failed');
       const result = await response.json();
-      if (result.success && result.data?.downloadUrl) {
-        setSelectedPhoto(result.data.downloadUrl);
+      // Prefer result.data.url (which is getUrl() with the ID) over downloadUrl (which expires and forces attachment)
+      const finalUrl = result.data?.url || result.data?.downloadUrl;
+      if (result.success && finalUrl) {
+        setSelectedPhoto(finalUrl);
       } else {
         throw new Error('No url returned');
       }
@@ -139,19 +141,37 @@ export const Messaging: React.FC<MessagingProps> = ({ profile }) => {
                       : 'bg-white text-gray-800 border border-gray-200 rounded-2xl rounded-bl-none mr-auto'
                   }`}
                 >
-                  {msg.photoUrl && (
-                    <div className="mb-2 -mx-1">
-                      <img 
-                        src={getDirectImageUrl(msg.photoUrl)} 
-                        alt="Shared image" 
-                        className="rounded-xl w-full max-w-[240px] max-h-[300px] object-cover cursor-pointer hover:opacity-90 transition-opacity bg-black/5" 
-                        loading="lazy"
-                        referrerPolicy="no-referrer"
-                        onClick={() => window.open(getDirectImageUrl(msg.photoUrl!), '_blank')}
-                      />
-                    </div>
-                  )}
-                  {msg.messageText && <p className="whitespace-pre-line">{msg.messageText}</p>}
+                  {(() => {
+                    let displayMsg = msg.messageText || '';
+                    let displayPhotoUrl = msg.photoUrl;
+                    
+                    if (displayMsg.includes('[PHOTO_URL]:')) {
+                      const parts = displayMsg.split('[PHOTO_URL]:');
+                      displayMsg = parts[0].trim();
+                      // If photoUrl was missing (old backend), use the extracted one
+                      if (!displayPhotoUrl) {
+                        displayPhotoUrl = parts[1].trim();
+                      }
+                    }
+                    
+                    return (
+                      <>
+                        {displayPhotoUrl && (
+                          <div className="mb-2 -mx-1">
+                            <img 
+                              src={getDirectImageUrl(displayPhotoUrl)} 
+                              alt="Shared image" 
+                              className="rounded-xl w-full max-w-[240px] max-h-[300px] object-cover cursor-pointer hover:opacity-90 transition-opacity bg-black/5" 
+                              loading="lazy"
+                              referrerPolicy="no-referrer"
+                              onClick={() => window.open(getDirectImageUrl(displayPhotoUrl!), '_blank')}
+                            />
+                          </div>
+                        )}
+                        {displayMsg && <p className="whitespace-pre-line">{displayMsg}</p>}
+                      </>
+                    );
+                  })()}
                   
                   <div className="flex items-center justify-end gap-1.5 mt-1 text-[10px]">
                     <span className={isMe ? 'text-blue-200/90' : 'text-gray-400'}>

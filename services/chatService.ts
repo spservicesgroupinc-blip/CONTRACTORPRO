@@ -117,8 +117,13 @@ class ChatService {
 
   // OPTIMISTIC STATE ENGINE: Send a message
   public async sendMessage(text: string, senderId: string, senderName: string, photoUrl?: string) {
-    const messageText = text.trim();
-    if (!messageText && !photoUrl) return;
+    let messageText = text.trim();
+    if (photoUrl) {
+      // Encode photoUrl into messageText so that old App Scripts will still save it
+      messageText = messageText ? `${messageText}\n[PHOTO_URL]:${photoUrl}` : `[PHOTO_URL]:${photoUrl}`;
+    }
+    
+    if (!messageText) return;
 
     const messageId = crypto.randomUUID();
     const optimisticMessage: ChatMessage = {
@@ -126,7 +131,7 @@ class ChatService {
       senderId,
       senderName,
       messageText,
-      photoUrl,
+      photoUrl, // We keep the real field as well
       timestamp: new Date().toISOString(),
       status: 'pending'
     };
