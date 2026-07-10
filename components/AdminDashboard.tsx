@@ -1611,7 +1611,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                                             };
 
                                             const uniqueWeeks = Array.from(new Set(completedEntries.map(e => getMondayDateString(e.clockIn)))).sort((a, b) => {
-                                                return new Date(b).getTime() - new Date(a).getTime();
+                                                return new Date(b as string).getTime() - new Date(a as string).getTime();
                                             });
 
                                             const filteredCheckedEntries = completedEntries.filter(e => {

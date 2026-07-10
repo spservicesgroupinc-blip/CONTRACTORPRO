@@ -27,6 +27,31 @@ export const getEntryDuration = (entry: TimeEntry, fallbackTimeMs: number) => {
     return Math.max(0, ((outTime - inTime) - breakTimeMs) / (1000 * 60 * 60));
 };
 
+const BreakTimer: React.FC<{ startTime: string }> = ({ startTime }) => {
+    const [elapsed, setElapsed] = useState('00:00:00');
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const start = new Date(startTime).getTime();
+            const diffMs = Date.now() - start;
+            if (diffMs < 0) return;
+            
+            const hours = Math.floor(diffMs / (1000 * 60 * 60));
+            const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
+            
+            setElapsed([
+                hours.toString().padStart(2, '0'),
+                minutes.toString().padStart(2, '0'),
+                seconds.toString().padStart(2, '0')
+            ].join(':'));
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [startTime]);
+
+    return <span>{elapsed}</span>;
+};
+
 const App: React.FC = () => {
     const [profile, setProfile] = useState<UserProfile | null>(() => {
         try {
@@ -68,6 +93,26 @@ const App: React.FC = () => {
 
     // Bottom FAB slide-up state
     const [isSlideUpOpen, setIsSlideUpOpen] = useState(false);
+    
+    // Break states
+    const [breakStartTime, setBreakStartTime] = useState<string | null>(() => localStorage.getItem('geotime_break_start'));
+    const [breakProject, setBreakProject] = useState<string | null>(() => localStorage.getItem('geotime_break_proj'));
+
+    useEffect(() => {
+        if (breakStartTime) {
+            localStorage.setItem('geotime_break_start', breakStartTime);
+        } else {
+            localStorage.removeItem('geotime_break_start');
+        }
+    }, [breakStartTime]);
+
+    useEffect(() => {
+        if (breakProject) {
+            localStorage.setItem('geotime_break_proj', breakProject);
+        } else {
+            localStorage.removeItem('geotime_break_proj');
+        }
+    }, [breakProject]);
     
     // Sidebar state
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -407,7 +452,9 @@ const App: React.FC = () => {
     }, [projects]);
 
     const [paylogFilterProject, setPaylogFilterProject] = useState('All');
-    const [paylogDateRange, setPaylogDateRange] = useState<'all' | 'this_week' | 'last_week' | 'this_month'>('this_week');
+    const [paylogDateRange, setPaylogDateRange] = useState<'all' | 'this_week' | 'last_week' | 'this_month' | 'custom'>('this_week');
+    const [paylogCustomStartDate, setPaylogCustomStartDate] = useState<string>('');
+    const [paylogCustomEndDate, setPaylogCustomEndDate] = useState<string>('');
 
     const [isSyncing, setIsSyncing] = useState(false);
 
@@ -523,13 +570,7 @@ const App: React.FC = () => {
         return !!lastEntry && !lastEntry.clockOut;
     }, [timeEntries]);
 
-    const isOnBreak = useMemo(() => {
-        if (!isClockedIn) return false;
-        const lastEntry = timeEntries[timeEntries.length - 1];
-        if (!lastEntry || !lastEntry.breaks) return false;
-        const lastBreak = lastEntry.breaks[lastEntry.breaks.length - 1];
-        return lastBreak && !lastBreak.end;
-    }, [isClockedIn, timeEntries]);
+    const isOnBreak = !!breakStartTime;
 
     // Paylog Filtering logic
     const filteredPaylogEntries = useMemo(() => {
@@ -559,10 +600,19 @@ const App: React.FC = () => {
         } else if (paylogDateRange === 'this_month') {
             const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
             filtered = filtered.filter(e => new Date(e.clockIn) >= startOfMonth);
+        } else if (paylogDateRange === 'custom') {
+            if (paylogCustomStartDate) {
+                const start = new Date(paylogCustomStartDate + 'T00:00:00');
+                filtered = filtered.filter(e => new Date(e.clockIn) >= start);
+            }
+            if (paylogCustomEndDate) {
+                const end = new Date(paylogCustomEndDate + 'T23:59:59.999');
+                filtered = filtered.filter(e => new Date(e.clockIn) <= end);
+            }
         }
         
         return filtered;
-    }, [timeEntries, paylogFilterProject, paylogDateRange, now]);
+    }, [timeEntries, paylogFilterProject, paylogDateRange, paylogCustomStartDate, paylogCustomEndDate, now]);
 
     const paylogTotals = useMemo(() => {
         let hours = 0;
@@ -580,6 +630,19 @@ const App: React.FC = () => {
             earnings: (hours * (profile?.hourlyWage || 0)) + expenses
         };
     }, [filteredPaylogEntries, profile, now]);
+
+    const paylogPeriodLabel = useMemo(() => {
+        if (paylogDateRange === 'this_week') return 'This Week';
+        if (paylogDateRange === 'last_week') return 'Last Week';
+        if (paylogDateRange === 'this_month') return 'This Month';
+        if (paylogDateRange === 'all') return 'All Time';
+        if (paylogDateRange === 'custom') {
+            const startStr = paylogCustomStartDate ? new Date(paylogCustomStartDate + 'T00:00:00').toLocaleDateString() : 'Beginning';
+            const endStr = paylogCustomEndDate ? new Date(paylogCustomEndDate + 'T00:00:00').toLocaleDateString() : 'Present';
+            return `${startStr} - ${endStr}`;
+        }
+        return 'Active Logs';
+    }, [paylogDateRange, paylogCustomStartDate, paylogCustomEndDate]);
 
     // Compute weekly hours
     const { weeklyHours, weeklyEarnings } = useMemo(() => {
@@ -606,28 +669,45 @@ const App: React.FC = () => {
     }, [timeEntries, now, profile]);
 
     const handleBreakToggle = async () => {
-        if (!isClockedIn) return;
+        if (!isClockedIn && !isOnBreak) return;
         setIsLoading(true);
         try {
-            const lastEntry = timeEntries[timeEntries.length - 1];
-            const currentBreaks = lastEntry.breaks ? [...lastEntry.breaks] : [];
-            const updatedEntry: TimeEntry = { ...lastEntry };
+            let location: Coordinates | undefined = undefined;
+            try {
+                location = await getCurrentPosition();
+            } catch (locErr) {
+                console.error('Location error during break toggle', locErr);
+            }
             
             if (isOnBreak) {
-                currentBreaks[currentBreaks.length - 1] = {
-                    ...currentBreaks[currentBreaks.length - 1],
-                    end: new Date().toISOString()
+                // End break (acts as clock in)
+                const proj = breakProject || 'General';
+                setBreakStartTime(null);
+                setBreakProject(null);
+                
+                const newEntry: TimeEntry = {
+                    id: new Date().toISOString(),
+                    projectName: proj,
+                    clockIn: new Date().toISOString(),
+                    clockInLocation: location,
                 };
+                setTimeEntries([...timeEntries, newEntry]);
             } else {
-                currentBreaks.push({ start: new Date().toISOString() });
+                // Take break (acts as clock out)
+                const lastEntry = timeEntries[timeEntries.length - 1];
+                setBreakStartTime(new Date().toISOString());
+                setBreakProject(lastEntry.projectName || 'General');
+
+                const updatedEntry: TimeEntry = {
+                    ...lastEntry,
+                    clockOut: new Date().toISOString(),
+                    clockOutLocation: location,
+                };
+                setTimeEntries([
+                    ...timeEntries.slice(0, timeEntries.length - 1),
+                    updatedEntry
+                ]);
             }
-            updatedEntry.breaks = currentBreaks;
-            
-            const updatedEntries = [
-                ...timeEntries.slice(0, timeEntries.length - 1),
-                updatedEntry
-            ];
-            setTimeEntries(updatedEntries);
         } catch(err) {
             console.error('Break toggle error', err);
         } finally {
@@ -656,6 +736,10 @@ const App: React.FC = () => {
                 setTimeEntries(updatedEntries);
             } else {
                 // Clocking in
+                if (isOnBreak) {
+                    setBreakStartTime(null);
+                    setBreakProject(null);
+                }
                 const newEntry: TimeEntry = {
                     id: new Date().toISOString(),
                     projectName: selectedProject || 'General',
@@ -676,6 +760,10 @@ const App: React.FC = () => {
                     { ...lastEntry, clockOut: new Date().toISOString() }
                 ]);
             } else {
+                if (isOnBreak) {
+                    setBreakStartTime(null);
+                    setBreakProject(null);
+                }
                 setTimeEntries([
                     ...timeEntries,
                     { id: new Date().toISOString(), projectName: selectedProject || 'General', clockIn: new Date().toISOString() }
@@ -885,7 +973,7 @@ const App: React.FC = () => {
                                </div>
                            </button>
 
-                           {isClockedIn && (
+                           { (isClockedIn || isOnBreak) && (
                                <button 
                                   onClick={handleBreakToggle}
                                   disabled={isLoading}
@@ -897,7 +985,7 @@ const App: React.FC = () => {
                                >
                                    {isOnBreak ? (
                                        <>
-                                           <Clock className="w-4 h-4 animate-pulse" /> End Break
+                                           <Clock className="w-4 h-4 animate-pulse" /> End Break (<BreakTimer startTime={breakStartTime!} />)
                                        </>
                                    ) : (
                                        <>
@@ -909,7 +997,7 @@ const App: React.FC = () => {
                        </div>
 
                        {/* Job Selection Dropdown */}
-                       {!isClockedIn && (
+                       {!isClockedIn && !isOnBreak && (
                            <div className="w-full max-w-[280px] mt-2 mb-4 px-6 text-center z-10">
                                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
                                    Select Job / Customer
@@ -927,7 +1015,7 @@ const App: React.FC = () => {
                                </select>
                            </div>
                        )}
-                       {isClockedIn && (
+                       { (isClockedIn || isOnBreak) && (
                            <div className="text-center mt-2 mb-4 px-6 z-10">
                                <span className="text-xs font-semibold text-gray-400">Active Job:</span>
                                <div className="mt-1">
@@ -1241,7 +1329,7 @@ const App: React.FC = () => {
                         <div className="flex items-center justify-between mb-2">
                             <h2 className="text-2xl font-bold text-gray-800">Pay Log</h2>
                             <button
-                                onClick={() => generatePayReport(profile, filteredPaylogEntries)}
+                                onClick={() => generatePayReport(profile, filteredPaylogEntries, paylogPeriodLabel)}
                                 disabled={filteredPaylogEntries.length === 0}
                                 className="bg-[#2563eb] text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                             >
@@ -1263,31 +1351,57 @@ const App: React.FC = () => {
                         </div>
 
                         {/* Filters */}
-                        <div className="flex gap-3">
-                            <div className="flex-1">
-                                <label className="block text-xs font-bold text-gray-500 mb-1 ml-1 uppercase">Period</label>
-                                <select 
-                                    value={paylogDateRange}
-                                    onChange={e => setPaylogDateRange(e.target.value as any)}
-                                    className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-[#2563eb]"
-                                >
-                                    <option value="this_week">This Week</option>
-                                    <option value="last_week">Last Week</option>
-                                    <option value="this_month">This Month</option>
-                                    <option value="all">All Time</option>
-                                </select>
+                        <div className="flex flex-col gap-3">
+                            <div className="flex gap-3">
+                                <div className="flex-1">
+                                    <label className="block text-xs font-bold text-gray-500 mb-1 ml-1 uppercase">Period</label>
+                                    <select 
+                                        value={paylogDateRange}
+                                        onChange={e => setPaylogDateRange(e.target.value as any)}
+                                        className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-[#2563eb]"
+                                    >
+                                        <option value="this_week">This Week</option>
+                                        <option value="last_week">Last Week</option>
+                                        <option value="this_month">This Month</option>
+                                        <option value="custom">Custom Range</option>
+                                        <option value="all">All Time</option>
+                                    </select>
+                                </div>
+                                <div className="flex-1">
+                                    <label className="block text-xs font-bold text-gray-500 mb-1 ml-1 uppercase">Project</label>
+                                    <select 
+                                        value={paylogFilterProject}
+                                        onChange={e => setPaylogFilterProject(e.target.value)}
+                                        className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-[#2563eb]"
+                                    >
+                                        <option value="All">All Projects</option>
+                                        {projects.map((p, idx) => <option key={idx} value={p}>{p}</option>)}
+                                    </select>
+                                </div>
                             </div>
-                            <div className="flex-1">
-                                <label className="block text-xs font-bold text-gray-500 mb-1 ml-1 uppercase">Project</label>
-                                <select 
-                                    value={paylogFilterProject}
-                                    onChange={e => setPaylogFilterProject(e.target.value)}
-                                    className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-[#2563eb]"
-                                >
-                                    <option value="All">All Projects</option>
-                                    {projects.map((p, idx) => <option key={idx} value={p}>{p}</option>)}
-                                </select>
-                            </div>
+
+                            {paylogDateRange === 'custom' && (
+                                <div className="grid grid-cols-2 gap-3 bg-gray-50 p-3.5 rounded-2xl border border-gray-150 shadow-inner">
+                                    <div>
+                                        <label className="block text-[10px] font-extrabold text-gray-400 mb-1 ml-1 uppercase tracking-wider">Start Date</label>
+                                        <input 
+                                            type="date"
+                                            value={paylogCustomStartDate}
+                                            onChange={e => setPaylogCustomStartDate(e.target.value)}
+                                            className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-[#2563eb]"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-extrabold text-gray-400 mb-1 ml-1 uppercase tracking-wider">End Date</label>
+                                        <input 
+                                            type="date"
+                                            value={paylogCustomEndDate}
+                                            onChange={e => setPaylogCustomEndDate(e.target.value)}
+                                            className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-[#2563eb]"
+                                        />
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <div className="bg-white rounded-2xl shadow-sm overflow-hidden mb-6">

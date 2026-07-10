@@ -25,7 +25,7 @@ const getCompanyInfo = (): CompanyInfo => {
     };
 };
 
-export const generatePayReport = (profile: UserProfile, timeEntries: TimeEntry[]) => {
+export const generatePayReport = (profile: UserProfile, timeEntries: TimeEntry[], periodLabel?: string) => {
     const doc = new jsPDF();
     const company = getCompanyInfo();
 
@@ -85,7 +85,7 @@ export const generatePayReport = (profile: UserProfile, timeEntries: TimeEntry[]
     doc.text('REPORT METADATA', 120, startYInfo);
     doc.setFont('helvetica', 'normal');
     doc.text(`Generated At: ${new Date().toLocaleString()}`, 120, startYInfo + 6);
-    doc.text(`Period Covered: Active Logs`, 120, startYInfo + 12);
+    doc.text(`Period Covered: ${periodLabel || 'Active Logs'}`, 120, startYInfo + 12);
 
     const tableColumn = ["Date", "Project / Job Site", "Time / Item", "Clock Out", "Duration (hrs)", "Gross Pay ($)"];
     const tableRows: (string | number)[][] = [];
