@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { TimeEntry, UserProfile } from '../types';
-import { Edit2, Trash2, Plus, X, Calendar, Clock, AlertCircle, Check, Camera, Loader2, Image as ImageIcon } from 'lucide-react';
+import { Edit2, Trash2, Plus, X, Calendar, Clock, AlertCircle, Check, Camera, Loader2, Image as ImageIcon, FileText } from 'lucide-react';
 import { compressAndEncodeBase64, getDirectImageUrl } from '../photoUtils';
 
 interface TimeLogProps {
@@ -67,6 +67,7 @@ const TimeLog: React.FC<TimeLogProps> = ({
     const [isExpense, setIsExpense] = useState(false);
     const [expenseDesc, setExpenseDesc] = useState('');
     const [expenseAmt, setExpenseAmt] = useState('');
+    const [notesVal, setNotesVal] = useState('');
     const [formError, setFormError] = useState('');
     const [photos, setPhotos] = useState<string[]>([]);
     const [isUploading, setIsUploading] = useState(false);
@@ -142,6 +143,7 @@ const TimeLog: React.FC<TimeLogProps> = ({
         setIsExpense(entry.isExpense || false);
         setExpenseDesc(entry.expenseDescription || '');
         setExpenseAmt(entry.expenseAmount !== undefined ? entry.expenseAmount.toString() : '');
+        setNotesVal(entry.notes || '');
         setFormError('');
         setIsModalOpen(true);
     };
@@ -161,6 +163,7 @@ const TimeLog: React.FC<TimeLogProps> = ({
         setIsExpense(false);
         setExpenseDesc('');
         setExpenseAmt('');
+        setNotesVal('');
         setFormError('');
         setIsModalOpen(true);
     };
@@ -178,6 +181,7 @@ const TimeLog: React.FC<TimeLogProps> = ({
         setIsExpense(true);
         setExpenseDesc('');
         setExpenseAmt('');
+        setNotesVal('');
         setFormError('');
         setIsModalOpen(true);
     };
@@ -228,6 +232,7 @@ const TimeLog: React.FC<TimeLogProps> = ({
             isExpense: isExpense,
             expenseDescription: isExpense ? expenseDesc.trim() : undefined,
             expenseAmount: isExpense ? parseFloat(expenseAmt) : undefined,
+            notes: notesVal.trim() || undefined,
             // Maintain locations and breaks if editing and they exist
             ...(existingEntry ? {
                 clockInLocation: existingEntry.clockInLocation,
@@ -353,6 +358,13 @@ const TimeLog: React.FC<TimeLogProps> = ({
                                         <div className="mt-2 text-xs font-semibold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-100 flex items-center gap-1.5 w-fit">
                                             <Clock className="w-3.5 h-3.5" />
                                             {entry.breaks.length} Break(s) taken
+                                        </div>
+                                    )}
+
+                                    {entry.notes && (
+                                        <div className="mt-3 text-xs font-medium text-gray-700 bg-slate-50 px-3 py-2 rounded-xl border border-gray-150 flex items-start gap-2">
+                                            <FileText className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
+                                            <span className="whitespace-pre-wrap">{entry.notes}</span>
                                         </div>
                                     )}
 
@@ -510,6 +522,19 @@ const TimeLog: React.FC<TimeLogProps> = ({
                                     )}
                                 </>
                             )}
+
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                                    Notes / Work Memo
+                                </label>
+                                <textarea 
+                                    rows={2}
+                                    placeholder="Add work details, site conditions, tasks completed..."
+                                    value={notesVal}
+                                    onChange={(e) => setNotesVal(e.target.value)}
+                                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 outline-none focus:bg-white focus:ring-2 focus:ring-[#2563eb] transition-all resize-none"
+                                />
+                            </div>
 
                             <div>
                                 <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex justify-between items-center">

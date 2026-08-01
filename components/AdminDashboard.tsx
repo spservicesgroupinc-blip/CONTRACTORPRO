@@ -64,6 +64,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
     const [editClockIn, setEditClockIn] = useState('');
     const [editClockOut, setEditClockOut] = useState('');
     const [editProject, setEditProject] = useState('');
+    const [editNotes, setEditNotes] = useState('');
     
     const [unreadChatCount, setUnreadChatCount] = useState(0);
     
@@ -557,7 +558,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                 ...editingEntry,
                 clockIn: new Date(editClockIn).toISOString(),
                 clockOut: editClockOut ? new Date(editClockOut).toISOString() : undefined,
-                projectName: editProject
+                projectName: editProject,
+                notes: editNotes.trim() || undefined
             };
             const res = await fetch('/api/sync', {
                 method: 'POST',
@@ -1189,6 +1191,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                                                 <span>Address Scope Code:</span>
                                                 <span className="text-slate-800 font-extrabold">{e.projectName || 'General'}</span>
                                             </div>
+                                            {e.notes && (
+                                                <div className="mt-2 text-[11px] font-medium text-slate-700 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-150 flex items-start gap-1.5">
+                                                    <FileText className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
+                                                    <span className="whitespace-pre-wrap">{e.notes}</span>
+                                                </div>
+                                            )}
                                             {e.photos && e.photos.length > 0 && (
                                                 <div className="mt-2 pt-2 border-t border-slate-50 flex gap-2 overflow-x-auto">
                                                     {e.photos.map((url, i) => (
@@ -1211,6 +1219,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                                                         setEditProject(e.projectName || 'General');
                                                         setEditClockIn(new Date(new Date(e.clockIn).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16));
                                                         setEditClockOut(e.clockOut ? new Date(new Date(e.clockOut).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '');
+                                                        setEditNotes(e.notes || '');
                                                     }}
                                                     className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
                                                 >
@@ -2065,6 +2074,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                                     className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-1 focus:ring-blue-500 transition-all"
                                 />
                                 <p className="text-[9px] text-slate-400 mt-1 ml-1 font-semibold">Leave empty if still clocked in.</p>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Notes / Work Memo</label>
+                                <textarea 
+                                    rows={2}
+                                    value={editNotes} 
+                                    onChange={(e) => setEditNotes(e.target.value)}
+                                    placeholder="Work details, notes, or memos..."
+                                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 outline-none focus:ring-1 focus:ring-blue-500 transition-all resize-none"
+                                />
                             </div>
                             <button 
                                 type="submit"

@@ -32,8 +32,8 @@ function setup() {
   let timeSheet = ss.getSheetByName("TimeEntries");
   if (!timeSheet) {
     timeSheet = ss.insertSheet("TimeEntries");
-    timeSheet.appendRow(["Entry ID", "Profile ID", "Project Name", "Clock In Time", "Clock Out Time", "Clock In Lat", "Clock In Lng", "Clock Out Lat", "Clock Out Lng", "Photos"]);
-    timeSheet.getRange("A1:J1").setFontWeight("bold");
+    timeSheet.appendRow(["Entry ID", "Profile ID", "Project Name", "Clock In Time", "Clock Out Time", "Clock In Lat", "Clock In Lng", "Clock Out Lat", "Clock Out Lng", "Photos", "Is Billed", "Is Expense", "Expense Description", "Expense Amount", "Notes"]);
+    timeSheet.getRange("A1:O1").setFontWeight("bold");
     timeSheet.setFrozenRows(1);
   }
 
@@ -156,6 +156,7 @@ function doPost(e) {
            timeSheet.getRange(i + 1, 12).setValue(updatedEntry.isExpense ? "TRUE" : "FALSE");
            timeSheet.getRange(i + 1, 13).setValue(updatedEntry.expenseDescription || "");
            timeSheet.getRange(i + 1, 14).setValue(updatedEntry.expenseAmount !== undefined ? updatedEntry.expenseAmount : "");
+           timeSheet.getRange(i + 1, 15).setValue(updatedEntry.notes || "");
            return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
         }
       }
@@ -215,6 +216,7 @@ function doPost(e) {
             timeSheet.getRange(rowIndex, 12).setValue(entry.isExpense ? "TRUE" : "FALSE");
             timeSheet.getRange(rowIndex, 13).setValue(entry.expenseDescription || "");
             timeSheet.getRange(rowIndex, 14).setValue(entry.expenseAmount !== undefined ? entry.expenseAmount : "");
+            timeSheet.getRange(rowIndex, 15).setValue(entry.notes || "");
             
             existingIdsInPayload.add(rowId);
           }
@@ -247,7 +249,8 @@ function doPost(e) {
               "", // isBilled (defaults empty)
               entry.isExpense ? "TRUE" : "FALSE",
               entry.expenseDescription || "",
-              entry.expenseAmount !== undefined ? entry.expenseAmount : ""
+              entry.expenseAmount !== undefined ? entry.expenseAmount : "",
+              entry.notes || ""
             ]);
           }
         }
@@ -308,7 +311,8 @@ function doPost(e) {
              isBilled: r[10] === true || r[10] === "TRUE" || r[10] === "true" || r[10] === 1 || r[10] === "1",
              isExpense: r[11] === true || r[11] === "TRUE" || r[11] === "true",
              expenseDescription: r[12] || "",
-             expenseAmount: r[13] ? parseFloat(r[13]) : undefined
+             expenseAmount: r[13] ? parseFloat(r[13]) : undefined,
+             notes: r[14] || ""
           }));
       }
 
@@ -407,7 +411,7 @@ function doPost(e) {
       let entries = [];
       if (tData.length > 1) {
           entries = tData.slice(1)
-            .filter(r => r[1] === payload.profileId)
+            .filter(r => matchId(r[1], payload.profileId))
             .map(r => ({
                id: r[0],
                profileId: r[1],
@@ -420,7 +424,8 @@ function doPost(e) {
                isBilled: r[10] === true || r[10] === "TRUE" || r[10] === "true" || r[10] === 1 || r[10] === "1",
                isExpense: r[11] === true || r[11] === "TRUE" || r[11] === "true",
                expenseDescription: r[12] || "",
-               expenseAmount: r[13] ? parseFloat(r[13]) : undefined
+               expenseAmount: r[13] ? parseFloat(r[13]) : undefined,
+               notes: r[14] || ""
             }));
       }
       return ContentService.createTextOutput(JSON.stringify({ success: true, data: { entries } })).setMimeType(ContentService.MimeType.JSON);

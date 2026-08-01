@@ -87,7 +87,7 @@ export const generatePayReport = (profile: UserProfile, timeEntries: TimeEntry[]
     doc.text(`Generated At: ${new Date().toLocaleString()}`, 120, startYInfo + 6);
     doc.text(`Period Covered: ${periodLabel || 'Active Logs'}`, 120, startYInfo + 12);
 
-    const tableColumn = ["Date", "Project / Job Site", "Time / Item", "Clock Out", "Duration (hrs)", "Gross Pay ($)"];
+    const tableColumn = ["Date", "Project / Job Site", "Clock In", "Clock Out", "Duration (hrs)", "Gross Pay ($)", "Notes / Memo"];
     const tableRows: (string | number)[][] = [];
     
     let totalHours = 0;
@@ -102,9 +102,10 @@ export const generatePayReport = (profile: UserProfile, timeEntries: TimeEntry[]
                 new Date(entry.clockIn).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }),
                 entry.projectName || 'General',
                 'EXPENSE',
-                entry.expenseDescription || 'No description',
                 '-',
-                `$${(entry.expenseAmount || 0).toFixed(2)}`
+                '-',
+                `$${(entry.expenseAmount || 0).toFixed(2)}`,
+                entry.notes || entry.expenseDescription || '-'
             ]);
         } else {
             const duration = calculateDuration(entry.clockIn, entry.clockOut);
@@ -117,7 +118,8 @@ export const generatePayReport = (profile: UserProfile, timeEntries: TimeEntry[]
                 new Date(entry.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 entry.clockOut ? new Date(entry.clockOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Active Now',
                 duration.toFixed(2),
-                `$${pay.toFixed(2)}`
+                `$${pay.toFixed(2)}`,
+                entry.notes || '-'
             ];
             tableRows.push(entryData);
         }
@@ -132,10 +134,10 @@ export const generatePayReport = (profile: UserProfile, timeEntries: TimeEntry[]
             fillColor: [16, 23, 38],
             textColor: [255, 255, 255],
             fontStyle: 'bold',
-            fontSize: 10
+            fontSize: 9
         },
         bodyStyles: {
-            fontSize: 9,
+            fontSize: 8,
             textColor: [50, 50, 50]
         },
         alternateRowStyles: {
@@ -143,7 +145,8 @@ export const generatePayReport = (profile: UserProfile, timeEntries: TimeEntry[]
         },
         columnStyles: {
             4: { halign: 'right' },
-            5: { halign: 'right' }
+            5: { halign: 'right' },
+            6: { cellWidth: 40 }
         }
     });
 
@@ -298,7 +301,7 @@ export const generateInvoicePDF = (invoice: Invoice, allUsers: UserProfile[], al
 
             const dateStr = new Date(entry.clockIn).toLocaleDateString();
             const workerName = user ? user.name : 'Unassigned Tech';
-            const logDesc = `Labor: ${workerName}\nSite/Project: ${entry.projectName || 'General'} (${dateStr})`;
+            const logDesc = `Labor: ${workerName}\nSite/Project: ${entry.projectName || 'General'} (${dateStr})${entry.notes ? `\nNote: ${entry.notes}` : ''}`;
 
             const rowMap: Record<string, string> = {
                 "Descriptive Log / Additions": logDesc,

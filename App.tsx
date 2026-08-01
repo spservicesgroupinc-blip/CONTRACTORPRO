@@ -68,13 +68,35 @@ const App: React.FC = () => {
     };
 
     const handleLogout = () => {
+        if (profile) {
+            localStorage.removeItem(`geotime_entries_${profile.id}`);
+        }
         localStorage.removeItem('currentUser');
         setProfile(null);
         setTimeEntries([]);
         chatService.clearCache();
     };
 
-    const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
+    const [timeEntries, setTimeEntries] = useState<TimeEntry[]>(() => {
+        try {
+            const savedUser = localStorage.getItem('currentUser');
+            if (savedUser) {
+                const u = JSON.parse(savedUser);
+                if (u && u.id) {
+                    const savedEntries = localStorage.getItem(`geotime_entries_${u.id}`);
+                    return savedEntries ? JSON.parse(savedEntries) : [];
+                }
+            }
+        } catch {}
+        return [];
+    });
+
+    useEffect(() => {
+        if (profile) {
+            localStorage.setItem(`geotime_entries_${profile.id}`, JSON.stringify(timeEntries));
+        }
+    }, [timeEntries, profile]);
+
     const [projects, setProjects] = useState<string[]>(['General']);
     
     // Tasks & AI Generator States
@@ -550,8 +572,21 @@ const App: React.FC = () => {
             })
             .then(res => res.json())
             .then(data => {
-                if (data && data.success && data.data && data.data.entries) {
-                    setTimeEntries(data.data.entries);
+                if (data && data.success && data.data && Array.isArray(data.data.entries)) {
+                    const remoteEntries: TimeEntry[] = data.data.entries;
+                    setTimeEntries(prev => {
+                        const map = new Map<string, TimeEntry>();
+                        remoteEntries.forEach(e => map.set(e.id, e));
+                        prev.forEach(e => {
+                            const existing = map.get(e.id);
+                            if (!existing || (!e.clockOut && !e.isExpense)) {
+                                map.set(e.id, e);
+                            }
+                        });
+                        return Array.from(map.values()).sort((a, b) => 
+                            new Date(a.clockIn).getTime() - new Date(b.clockIn).getTime()
+                        );
+                    });
                 }
             })
             .catch(e => console.error('Error fetching time entries:', e));
@@ -565,10 +600,11 @@ const App: React.FC = () => {
         return () => clearInterval(interval);
     }, []);
 
-    const isClockedIn = useMemo(() => {
-        const lastEntry = timeEntries.length > 0 ? timeEntries[timeEntries.length - 1] : null;
-        return !!lastEntry && !lastEntry.clockOut;
+    const activeEntry = useMemo(() => {
+        return timeEntries.find(e => !e.isExpense && !e.clockOut);
     }, [timeEntries]);
+
+    const isClockedIn = !!activeEntry;
 
     const isOnBreak = !!breakStartTime;
 
@@ -694,19 +730,18 @@ const App: React.FC = () => {
                 setTimeEntries([...timeEntries, newEntry]);
             } else {
                 // Take break (acts as clock out)
-                const lastEntry = timeEntries[timeEntries.length - 1];
-                setBreakStartTime(new Date().toISOString());
-                setBreakProject(lastEntry.projectName || 'General');
+                const active = timeEntries.find(e => !e.isExpense && !e.clockOut) || timeEntries[timeEntries.length - 1];
+                if (active) {
+                    setBreakStartTime(new Date().toISOString());
+                    setBreakProject(active.projectName || 'General');
 
-                const updatedEntry: TimeEntry = {
-                    ...lastEntry,
-                    clockOut: new Date().toISOString(),
-                    clockOutLocation: location,
-                };
-                setTimeEntries([
-                    ...timeEntries.slice(0, timeEntries.length - 1),
-                    updatedEntry
-                ]);
+                    const updatedEntry: TimeEntry = {
+                        ...active,
+                        clockOut: new Date().toISOString(),
+                        clockOutLocation: location,
+                    };
+                    setTimeEntries(prev => prev.map(e => e.id === active.id ? updatedEntry : e));
+                }
             }
         } catch(err) {
             console.error('Break toggle error', err);
@@ -715,25 +750,34 @@ const App: React.FC = () => {
         }
     };
 
+    const [clockNote, setClockNote] = useState('');
+
     const handleClockToggle = async () => {
         setIsLoading(true);
         try {
-            const location: Coordinates = await getCurrentPosition();
-            let updatedEntries: TimeEntry[] = [];
+            let location: Coordinates | undefined;
+            try {
+                location = await getCurrentPosition();
+            } catch (locErr) {
+                console.error('Location error during clock toggle:', locErr);
+            }
 
-            if (isClockedIn) {
+            const active = timeEntries.find(e => !e.isExpense && !e.clockOut);
+
+            if (active) {
                 // Clocking out
-                const lastEntry = timeEntries[timeEntries.length - 1];
+                const noteText = clockNote.trim();
+                const combinedNotes = noteText 
+                    ? (active.notes ? `${active.notes}\n${noteText}` : noteText) 
+                    : active.notes;
                 const updatedEntry: TimeEntry = {
-                    ...lastEntry,
+                    ...active,
                     clockOut: new Date().toISOString(),
-                    clockOutLocation: location,
+                    clockOutLocation: location || active.clockOutLocation,
+                    notes: combinedNotes
                 };
-                updatedEntries = [
-                    ...timeEntries.slice(0, timeEntries.length - 1),
-                    updatedEntry
-                ];
-                setTimeEntries(updatedEntries);
+                setTimeEntries(prev => prev.map(e => e.id === active.id ? updatedEntry : e));
+                setClockNote('');
             } else {
                 // Clocking in
                 if (isOnBreak) {
@@ -745,30 +789,13 @@ const App: React.FC = () => {
                     projectName: selectedProject || 'General',
                     clockIn: new Date().toISOString(),
                     clockInLocation: location,
+                    notes: clockNote.trim() || undefined
                 };
-                updatedEntries = [...timeEntries, newEntry];
-                setTimeEntries(updatedEntries);
+                setTimeEntries(prev => [...prev, newEntry]);
+                setClockNote('');
             }
         } catch (err: any) {
-            console.error('Location error:', err);
-            // Fallback: Clock in without location if requested, or just show error. 
-            // We'll proceed without location just to make it usable if location fails.
-            if (isClockedIn) {
-                const lastEntry = timeEntries[timeEntries.length - 1];
-                setTimeEntries([
-                    ...timeEntries.slice(0, timeEntries.length - 1),
-                    { ...lastEntry, clockOut: new Date().toISOString() }
-                ]);
-            } else {
-                if (isOnBreak) {
-                    setBreakStartTime(null);
-                    setBreakProject(null);
-                }
-                setTimeEntries([
-                    ...timeEntries,
-                    { id: new Date().toISOString(), projectName: selectedProject || 'General', clockIn: new Date().toISOString() }
-                ]);
-            }
+            console.error('Clock toggle error:', err);
         } finally {
             setIsLoading(false);
         }
@@ -994,6 +1021,20 @@ const App: React.FC = () => {
                                    )}
                                </button>
                            )}
+                       </div>
+
+                       {/* Shift Notes Input */}
+                       <div className="w-full max-w-[280px] mt-2 mb-2 px-6 text-center z-10">
+                           <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex justify-center items-center gap-1">
+                               <FileText className="w-3 h-3 text-blue-500" /> Shift Note / Memo
+                           </label>
+                           <input 
+                               type="text"
+                               placeholder={isClockedIn ? "Add note when clocking out..." : "Optional note for shift start..."}
+                               value={clockNote}
+                               onChange={(e) => setClockNote(e.target.value)}
+                               className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-700 outline-none focus:ring-2 focus:ring-[#2563eb] focus:bg-white transition-all shadow-sm"
+                           />
                        </div>
 
                        {/* Job Selection Dropdown */}

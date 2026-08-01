@@ -45,6 +45,7 @@ export interface TimeEntry {
   isExpense?: boolean;
   expenseDescription?: string;
   expenseAmount?: number;
+  notes?: string;
 }
 
 export interface UserProfile {
