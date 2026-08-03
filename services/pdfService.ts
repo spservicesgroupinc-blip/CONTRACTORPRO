@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { UserProfile, TimeEntry, Invoice, CompanyInfo } from '../types';
+import { UserProfile, TimeEntry, Invoice, CompanyInfo, PayReport } from '../types';
 
 const calculateDuration = (clockIn: string, clockOut?: string): number => {
     if (!clockOut) return 0;
@@ -25,7 +25,7 @@ const getCompanyInfo = (): CompanyInfo => {
     };
 };
 
-export const generatePayReport = (profile: UserProfile, timeEntries: TimeEntry[], periodLabel?: string) => {
+export const generatePayReport = (profile: UserProfile, timeEntries: TimeEntry[], periodLabel?: string, reportDetails?: Partial<PayReport>) => {
     const doc = new jsPDF();
     const company = getCompanyInfo();
 
@@ -57,7 +57,7 @@ export const generatePayReport = (profile: UserProfile, timeEntries: TimeEntry[]
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(14);
     doc.setTextColor(249, 115, 22);
-    doc.text('PAY REPORT', 150, 25, { align: 'right' });
+    doc.text('PAY REPORT', 196, 25, { align: 'right' });
 
     let startYInfo = 55;
     if (company.address) {
@@ -74,20 +74,34 @@ export const generatePayReport = (profile: UserProfile, timeEntries: TimeEntry[]
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
 
+    const empName = reportDetails?.employeeName || profile.name;
+    const wage = reportDetails?.hourlyWage !== undefined ? reportDetails.hourlyWage : profile.hourlyWage;
+    const reportId = reportDetails?.id || `REP-${Date.now().toString(36).toUpperCase()}`;
+    const status = (reportDetails?.status || 'approved').toUpperCase();
+    const generatedAtStr = reportDetails?.generatedAt ? new Date(reportDetails.generatedAt).toLocaleString() : new Date().toLocaleString();
+
     // Grid Info
     doc.setFont('helvetica', 'bold');
     doc.text('EMPLOYEE DETAILS', 14, startYInfo);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Name: ${profile.name}`, 14, startYInfo + 6);
-    doc.text(`Base Hourly Wage: $${profile.hourlyWage.toFixed(2)}/hr`, 14, startYInfo + 12);
+    doc.text(`Name: ${empName}`, 14, startYInfo + 6);
+    doc.text(`Base Hourly Wage: $${wage.toFixed(2)}/hr`, 14, startYInfo + 12);
 
     doc.setFont('helvetica', 'bold');
     doc.text('REPORT METADATA', 120, startYInfo);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Generated At: ${new Date().toLocaleString()}`, 120, startYInfo + 6);
-    doc.text(`Period Covered: ${periodLabel || 'Active Logs'}`, 120, startYInfo + 12);
+    doc.text(`Report ID: #${reportId}`, 120, startYInfo + 6);
+    doc.text(`Generated At: ${generatedAtStr}`, 120, startYInfo + 12);
+    doc.text(`Period Covered: ${reportDetails?.periodLabel || periodLabel || 'Active Logs'}`, 120, startYInfo + 18);
+    doc.text(`Status: ${status}`, 120, startYInfo + 24);
+
+    if (reportDetails?.notes) {
+        doc.text(`Memo: ${reportDetails.notes}`, 14, startYInfo + 18);
+        startYInfo += 6;
+    }
 
     const tableColumn = ["Date", "Project / Job Site", "Clock In", "Clock Out", "Duration (hrs)", "Gross Pay ($)", "Notes / Memo"];
+
     const tableRows: (string | number)[][] = [];
     
     let totalHours = 0;
@@ -109,7 +123,7 @@ export const generatePayReport = (profile: UserProfile, timeEntries: TimeEntry[]
             ]);
         } else {
             const duration = calculateDuration(entry.clockIn, entry.clockOut);
-            const pay = duration * profile.hourlyWage;
+            const pay = duration * wage;
             totalHours += duration;
             totalPay += pay;
             const entryData = [

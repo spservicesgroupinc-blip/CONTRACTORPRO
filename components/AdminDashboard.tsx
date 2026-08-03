@@ -687,76 +687,207 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
 
     const activeWorkersCount = adminData?.entries.filter(e => !e.clockOut).length || 0;
 
+    const handleExportCSV = () => {
+        if (!filteredEntries || filteredEntries.length === 0) {
+            alert('No entries available to export matching current filters.');
+            return;
+        }
+        const headers = ['Date', 'Worker Name', 'Job Site', 'Clock In', 'Clock Out', 'Hours', 'Wage ($/h)', 'Gross Pay ($)', 'Notes'];
+        const rows = filteredEntries.map(e => {
+            const user = adminData?.users.find(u => String(u.id).trim() === String(e.profileId).trim());
+            const wage = user ? parseFloat(user.hourlyWage) : 0;
+            const inTime = new Date(e.clockIn).getTime();
+            const outTime = e.clockOut ? new Date(e.clockOut).getTime() : Date.now();
+            const dur = Math.max(0, (outTime - inTime) / (1000 * 60 * 60));
+            return [
+                new Date(e.clockIn).toLocaleDateString(),
+                `"${user ? user.name : 'Unknown'}"`,
+                `"${e.projectName || 'General'}"`,
+                new Date(e.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                e.clockOut ? new Date(e.clockOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Active',
+                dur.toFixed(2),
+                wage.toFixed(2),
+                (dur * wage).toFixed(2),
+                `"${(e.notes || '').replace(/"/g, '""')}"`
+            ].join(',');
+        });
+        const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows].join('\n');
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement('a');
+        link.setAttribute('href', encodedUri);
+        link.setAttribute('download', `timesheet_export_${new Date().toISOString().slice(0, 10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     return (
-        <div className="w-full max-w-md mx-auto min-h-[100dvh] bg-slate-50 flex flex-col relative shadow-xl overflow-y-auto pb-20">
-            {/* 1. Global Admin Header (Clean, consistent layout like normal app) */}
-            <header className="bg-blue-950 text-white px-5 py-4 shrink-0 relative flex items-center justify-between shadow-sm z-30">
-                <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center font-bold text-sm text-white border border-white/15">
-                        A
+        <div className="w-full min-h-[100dvh] bg-slate-50 flex flex-col relative overflow-y-auto pb-20">
+            {/* 1. Global Admin Header (Clean, consistent layout with desktop full-screen support) */}
+            <header className="bg-blue-950 text-white px-5 py-3.5 shrink-0 relative shadow-sm z-30">
+                <div className="max-w-7xl w-full mx-auto flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center font-bold text-sm text-white border border-white/15 shadow-sm">
+                            A
+                        </div>
+                        <div>
+                            <h1 className="text-sm font-bold tracking-tight">Admin Portal</h1>
+                            <p className="text-[10px] font-bold text-blue-300 uppercase tracking-wider">ProContractor Executive</p>
+                        </div>
                     </div>
-                    <div>
-                        <h1 className="text-sm font-bold tracking-tight">Admin Portal</h1>
-                        <p className="text-[10px] font-bold text-blue-300 uppercase tracking-wider">ProContractor Executive</p>
-                    </div>
+
+                    {/* Desktop Navigation Tabs */}
+                    <nav className="hidden md:flex items-center gap-1 bg-blue-900/60 p-1 rounded-xl border border-blue-800/80">
+                        <button
+                            onClick={() => setActiveTab('hub')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                activeTab === 'hub' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-200 hover:text-white hover:bg-blue-800/50'
+                            }`}
+                        >
+                            Hub
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('live')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                activeTab === 'live' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-200 hover:text-white hover:bg-blue-800/50'
+                            }`}
+                        >
+                            Live Map
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('employees')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                activeTab === 'employees' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-200 hover:text-white hover:bg-blue-800/50'
+                            }`}
+                        >
+                            Workforce
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('invoices')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                activeTab === 'invoices' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-200 hover:text-white hover:bg-blue-800/50'
+                            }`}
+                        >
+                            Billing
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('customers')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                activeTab === 'customers' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-200 hover:text-white hover:bg-blue-800/50'
+                            }`}
+                        >
+                            Clients
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('jobs')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                activeTab === 'jobs' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-200 hover:text-white hover:bg-blue-800/50'
+                            }`}
+                        >
+                            Projects
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('chat')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all relative ${
+                                activeTab === 'chat' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-200 hover:text-white hover:bg-blue-800/50'
+                            }`}
+                        >
+                            Chat
+                            {unreadChatCount > 0 && (
+                                <span className="ml-1 bg-red-500 text-white text-[9px] px-1 rounded-full font-bold">
+                                    {unreadChatCount}
+                                </span>
+                            )}
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('company')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                activeTab === 'company' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-200 hover:text-white hover:bg-blue-800/50'
+                            }`}
+                        >
+                            Settings
+                        </button>
+                    </nav>
+
+                    <button 
+                        onClick={onClose}
+                        className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 active:scale-95 text-xs font-bold text-white rounded-xl transition-all cursor-pointer border border-white/10"
+                    >
+                        Exit Console
+                    </button>
                 </div>
-                <button 
-                    onClick={onClose}
-                    className="px-3 py-1.5 bg-white/10 hover:bg-white/20 active:scale-95 text-xs font-bold text-white rounded-lg transition-all cursor-pointer"
-                >
-                    Exit Console
-                </button>
             </header>
 
             {/* MAIN PORTAL BODY VIEWPORTS */}
-            <div className="flex-1 w-full p-5 flex flex-col pb-24">
+            <div className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 flex flex-col pb-24">
                 
                 {/* A. HOME HUB VIEWPORT (Replaces the "bunch of buttons" layout with a gorgeous mobile dashboard launcher) */}
                 {activeTab === 'hub' && (
                     <div className="flex-1 flex flex-col animate-in fade-in transition-all duration-300">
                         
-                        {/* At-A-Glance Bento Stats Grid */}
+                        {/* At-A-Glance Bento Stats Grid - Clickable Stat Links */}
                         <div className="grid grid-cols-3 gap-3 mb-6">
-                            {/* Live Workers Stat */}
-                            <div className="bg-white rounded-2xl border border-slate-100 p-3.5 shadow-sm flex flex-col justify-between min-h-[96px]">
+                            {/* Live Workers Stat - Click to view Live Tracker */}
+                            <button 
+                                type="button"
+                                onClick={() => setActiveTab('live')}
+                                className="bg-white hover:bg-emerald-50/50 hover:border-emerald-200 rounded-2xl border border-slate-100 p-3.5 shadow-sm flex flex-col justify-between min-h-[96px] text-left transition-all active:scale-95 cursor-pointer group"
+                            >
                                 <div className="flex items-center justify-between">
-                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Live Now</span>
+                                    <span className="text-[9px] font-bold text-slate-400 group-hover:text-emerald-700 uppercase tracking-wider">Live Now</span>
                                     <span className="relative flex h-2.5 w-2.5">
                                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                                         <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                                     </span>
                                 </div>
                                 <div className="mt-2.5">
-                                    <p className="text-2xl font-extrabold text-slate-800 leading-none">{activeWorkersCount}</p>
-                                    <p className="text-[10px] text-slate-500 font-medium mt-1">Clocked In</p>
+                                    <p className="text-2xl font-extrabold text-slate-800 group-hover:text-emerald-600 leading-none">{activeWorkersCount}</p>
+                                    <p className="text-[10px] text-slate-500 font-medium mt-1 flex items-center justify-between">
+                                        <span>Clocked In</span>
+                                        <ChevronRight className="w-3 h-3 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-transform" />
+                                    </p>
                                 </div>
-                            </div>
+                            </button>
 
-                            {/* Total Hours Stat */}
-                            <div className="bg-white rounded-2xl border border-slate-100 p-3.5 shadow-sm flex flex-col justify-between min-h-[96px]">
+                            {/* Total Hours Stat - Click to view Workforce Timesheets */}
+                            <button 
+                                type="button"
+                                onClick={() => setActiveTab('employees')}
+                                className="bg-white hover:bg-blue-50/50 hover:border-blue-200 rounded-2xl border border-slate-100 p-3.5 shadow-sm flex flex-col justify-between min-h-[96px] text-left transition-all active:scale-95 cursor-pointer group"
+                            >
                                 <div className="flex items-center justify-between">
-                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Hours</span>
+                                    <span className="text-[9px] font-bold text-slate-400 group-hover:text-blue-700 uppercase tracking-wider">Hours</span>
                                     <Clock className="w-4 h-4 text-blue-500 shrink-0" />
                                 </div>
                                 <div className="mt-2.5">
-                                    <p className="text-2xl font-extrabold text-slate-800 leading-none">{totalHours.toFixed(1)}h</p>
-                                    <p className="text-[10px] text-slate-500 font-medium mt-1">Total Time</p>
+                                    <p className="text-2xl font-extrabold text-slate-800 group-hover:text-blue-600 leading-none">{totalHours.toFixed(1)}h</p>
+                                    <p className="text-[10px] text-slate-500 font-medium mt-1 flex items-center justify-between">
+                                        <span>Total Time</span>
+                                        <ChevronRight className="w-3 h-3 text-slate-300 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-transform" />
+                                    </p>
                                 </div>
-                            </div>
+                            </button>
 
-                            {/* Estimated Payroll Stat */}
-                            <div className="bg-white rounded-2xl border border-slate-100 p-3.5 shadow-sm flex flex-col justify-between min-h-[96px]">
+                            {/* Estimated Payroll Stat - Click to view Invoices & Billing */}
+                            <button 
+                                type="button"
+                                onClick={() => setActiveTab('invoices')}
+                                className="bg-white hover:bg-cyan-50/50 hover:border-cyan-200 rounded-2xl border border-slate-100 p-3.5 shadow-sm flex flex-col justify-between min-h-[96px] text-left transition-all active:scale-95 cursor-pointer group"
+                            >
                                 <div className="flex items-center justify-between">
-                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Payroll</span>
+                                    <span className="text-[9px] font-bold text-slate-400 group-hover:text-cyan-700 uppercase tracking-wider">Payroll</span>
                                     <DollarSign className="w-4 h-4 text-emerald-550 shrink-0" />
                                 </div>
                                 <div className="mt-2.5">
-                                    <p className="text-2xl font-extrabold text-slate-850 leading-none">
+                                    <p className="text-2xl font-extrabold text-slate-850 group-hover:text-cyan-700 leading-none">
                                         ${totalPay.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                     </p>
-                                    <p className="text-[10px] text-slate-500 font-medium mt-1">Gross Cost</p>
+                                    <p className="text-[10px] text-slate-500 font-medium mt-1 flex items-center justify-between">
+                                        <span>Gross Cost</span>
+                                        <ChevronRight className="w-3 h-3 text-slate-300 group-hover:text-cyan-600 group-hover:translate-x-0.5 transition-transform" />
+                                    </p>
                                 </div>
-                            </div>
+                            </button>
                         </div>
 
                         {/* Navigation Section Header */}
@@ -765,7 +896,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                         </div>
 
                         {/* Executive Tool Grid (Elegant action hubs with custom icons, titles, and subtext) */}
-                        <div className="space-y-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
                             {/* 1. Live Field Tracker */}
                             <button 
                                 onClick={() => setActiveTab('live')}
@@ -1138,7 +1269,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                         {/* Logs Title block */}
                         <div className="flex justify-between items-center mb-3 px-1 pl-2">
                             <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">Timesheet Log Entries ({filteredEntries.length})</span>
-                            <button className="text-[11px] font-bold text-blue-650 flex items-center gap-1.5 bg-blue-50 border border-blue-100 hover:bg-blue-100 px-3 py-1.5 rounded-full transition-colors cursor-pointer">
+                            <button 
+                                onClick={handleExportCSV}
+                                className="text-[11px] font-bold text-blue-650 flex items-center gap-1.5 bg-blue-50 border border-blue-100 hover:bg-blue-100 px-3 py-1.5 rounded-full transition-colors cursor-pointer active:scale-95"
+                            >
                                 <Download className="w-3.5 h-3.5" /> Exports CSV
                             </button>
                         </div>

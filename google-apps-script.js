@@ -85,6 +85,15 @@ function setup() {
     customersSheet.getRange("A1:F1").setFontWeight("bold");
     customersSheet.setFrozenRows(1);
   }
+
+  // PayReports sheet
+  let payReportsSheet = ss.getSheetByName("PayReports");
+  if (!payReportsSheet) {
+    payReportsSheet = ss.insertSheet("PayReports");
+    payReportsSheet.appendRow(["Report ID", "Profile ID", "Employee Name", "Period Label", "Generated At", "Total Hours", "Total Pay", "Status", "Notes", "Payload JSON"]);
+    payReportsSheet.getRange("A1:J1").setFontWeight("bold");
+    payReportsSheet.setFrozenRows(1);
+  }
 }
 
 function matchId(sheetVal, inputId) {
@@ -357,8 +366,21 @@ function doPost(e) {
            }
         });
       }
+
+      const payReportsSheet = ss.getSheetByName("PayReports");
+      const prData = payReportsSheet ? payReportsSheet.getDataRange().getValues() : [];
+      let payReports = [];
+      if (prData.length > 1) {
+        payReports = prData.slice(1).map(r => {
+          try {
+            return JSON.parse(r[9]);
+          } catch(e) {
+            return null;
+          }
+        }).filter(r => r !== null);
+      }
       
-      return ContentService.createTextOutput(JSON.stringify({ success: true, data: { users, entries, invoices, projects, customers, companyInfo } })).setMimeType(ContentService.MimeType.JSON);
+      return ContentService.createTextOutput(JSON.stringify({ success: true, data: { users, entries, invoices, projects, customers, companyInfo, payReports } })).setMimeType(ContentService.MimeType.JSON);
     }
     
     if (action === "LOGIN_USER") {
@@ -428,7 +450,116 @@ function doPost(e) {
                notes: r[14] || ""
             }));
       }
-      return ContentService.createTextOutput(JSON.stringify({ success: true, data: { entries } })).setMimeType(ContentService.MimeType.JSON);
+
+      const payReportsSheet = ss.getSheetByName("PayReports");
+      const prData = payReportsSheet ? payReportsSheet.getDataRange().getValues() : [];
+      let payReports = [];
+      if (prData.length > 1) {
+        payReports = prData.slice(1).map(r => {
+          try {
+            return JSON.parse(r[9]);
+          } catch(e) {
+            return null;
+          }
+        }).filter(r => r !== null && matchId(r.profileId, payload.profileId));
+      }
+
+      return ContentService.createTextOutput(JSON.stringify({ success: true, data: { entries, payReports } })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === "SAVE_PAY_REPORT") {
+      const payReportsSheet = ss.getSheetByName("PayReports");
+      if (!payReportsSheet) {
+        return ContentService.createTextOutput(JSON.stringify({ success: false, error: "PayReports sheet not found" })).setMimeType(ContentService.MimeType.JSON);
+      }
+      const data = payReportsSheet.getDataRange().getValues();
+      const report = payload.report;
+      if (!report || !report.id) {
+        return ContentService.createTextOutput(JSON.stringify({ success: false, error: "Missing report ID" })).setMimeType(ContentService.MimeType.JSON);
+      }
+      
+      let updated = false;
+      for (let i = 1; i < data.length; i++) {
+        if (matchId(data[i][0], report.id)) {
+          payReportsSheet.getRange(i + 1, 2).setValue(report.profileId || "");
+          payReportsSheet.getRange(i + 1, 3).setValue(report.employeeName || "");
+          payReportsSheet.getRange(i + 1, 4).setValue(report.periodLabel || "");
+          payReportsSheet.getRange(i + 1, 5).setValue(report.generatedAt || new Date().toISOString());
+          payReportsSheet.getRange(i + 1, 6).setValue(report.totalHours !== undefined ? report.totalHours : 0);
+          payReportsSheet.getRange(i + 1, 7).setValue(report.totalGrossPay !== undefined ? report.totalGrossPay : 0);
+          payReportsSheet.getRange(i + 1, 8).setValue(report.status || "approved");
+          payReportsSheet.getRange(i + 1, 9).setValue(report.notes || "");
+          payReportsSheet.getRange(i + 1, 10).setValue(JSON.stringify(report));
+          updated = true;
+          break;
+        }
+      }
+      
+      if (!updated) {
+        payReportsSheet.appendRow([
+          report.id,
+          report.profileId || "",
+          report.employeeName || "",
+          report.periodLabel || "",
+          report.generatedAt || new Date().toISOString(),
+          report.totalHours !== undefined ? report.totalHours : 0,
+          report.totalGrossPay !== undefined ? report.totalGrossPay : 0,
+          report.status || "approved",
+          report.notes || "",
+          JSON.stringify(report)
+        ]);
+      }
+      
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Pay report saved successfully" })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === "DELETE_PAY_REPORT") {
+      const payReportsSheet = ss.getSheetByName("PayReports");
+      if (!payReportsSheet) {
+        return ContentService.createTextOutput(JSON.stringify({ success: false, error: "PayReports sheet not found" })).setMimeType(ContentService.MimeType.JSON);
+      }
+      const data = payReportsSheet.getDataRange().getValues();
+      const reportId = payload.reportId || payload.id;
+      let deleted = false;
+      for (let i = 1; i < data.length; i++) {
+        if (matchId(data[i][0], reportId)) {
+          payReportsSheet.deleteRow(i + 1);
+          deleted = true;
+          break;
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: deleted })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === "FETCH_PAY_REPORTS") {
+      const payReportsSheet = ss.getSheetByName("PayReports");
+      const prData = payReportsSheet ? payReportsSheet.getDataRange().getValues() : [];
+      let payReports = [];
+      if (prData.length > 1) {
+        payReports = prData.slice(1).map(r => {
+          try {
+            return JSON.parse(r[9]);
+          } catch(e) {
+            return {
+              id: String(r[0]),
+              profileId: String(r[1]),
+              employeeName: String(r[2]),
+              periodLabel: String(r[3]),
+              generatedAt: String(r[4]),
+              totalHours: parseFloat(r[5]) || 0,
+              totalGrossPay: parseFloat(r[6]) || 0,
+              status: String(r[7] || "approved"),
+              notes: String(r[8] || ""),
+              timeEntries: []
+            };
+          }
+        }).filter(r => r !== null);
+        
+        if (payload && payload.profileId) {
+          payReports = payReports.filter(r => matchId(r.profileId, payload.profileId));
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, data: { payReports } })).setMimeType(ContentService.MimeType.JSON);
     }
     
     if (action === "ADD_EMPLOYEE") {

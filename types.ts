@@ -82,4 +82,22 @@ export interface Task {
   photos?: string[];
 }
 
+export interface PayReport {
+  id: string;
+  profileId: string;
+  employeeName: string;
+  hourlyWage: number;
+  periodLabel: string;
+  generatedAt: string; // ISO string
+  startDate?: string;
+  endDate?: string;
+  projectFilter?: string;
+  totalHours: number;
+  totalGrossPay: number;
+  status: 'draft' | 'approved' | 'paid';
+  notes?: string;
+  timeEntries: TimeEntry[];
+}
+
+
 

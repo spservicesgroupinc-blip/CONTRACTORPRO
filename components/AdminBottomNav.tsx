@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Users, MapPin, Menu, Plus } from 'lucide-react';
+import { Home, Users, MapPin, Menu, FileText } from 'lucide-react';
 
 interface AdminBottomNavProps {
   currentTab: string;
@@ -9,49 +9,56 @@ interface AdminBottomNavProps {
 
 const AdminBottomNav: React.FC<AdminBottomNavProps> = ({ currentTab, setCurrentTab, onMenuClick }) => {
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 pointer-events-none pb-[env(safe-area-inset-bottom)] whitespace-nowrap will-change-transform">
-      <div className="bg-white/95 backdrop-blur-md border-t border-gray-200/60 shadow-[0_-8px_30px_-15px_rgba(0,0,0,0.1)] pointer-events-auto flex items-center justify-between h-16 max-w-md mx-auto px-4 transform-gpu">
+    <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 pointer-events-none pb-[env(safe-area-inset-bottom)] whitespace-nowrap will-change-transform">
+      <div className="bg-white/95 backdrop-blur-lg border-t md:border border-gray-200/80 shadow-[0_-8px_30px_-15px_rgba(0,0,0,0.12)] md:shadow-xl pointer-events-auto flex items-center justify-between h-16 max-w-md md:max-w-xl mx-auto px-4 md:rounded-2xl md:mb-3 transform-gpu">
         
         <button 
           onClick={() => setCurrentTab('hub')} 
-          className={`flex flex-col items-center justify-center gap-1 w-12 transition-colors active:scale-95 ${currentTab === 'hub' ? 'text-blue-600 font-semibold' : 'text-gray-400'}`}
+          className={`flex flex-col items-center justify-center min-w-[52px] h-12 rounded-xl transition-all active:scale-95 ${
+            currentTab === 'hub' ? 'text-blue-600 bg-blue-50/80 font-bold' : 'text-gray-500 hover:text-gray-800'
+          }`}
         >
-          <Home className="w-6 h-6" />
-          <span className="text-[10px]">Hub</span>
+          <Home className="w-5 h-5" />
+          <span className="text-[11px] mt-0.5 tracking-tight">Hub</span>
         </button>
         
         <button 
           onClick={() => setCurrentTab('live')} 
-          className={`flex flex-col items-center justify-center gap-1 w-12 transition-colors active:scale-95 ${currentTab === 'live' ? 'text-blue-600 font-semibold' : 'text-gray-400'}`}
+          className={`flex flex-col items-center justify-center min-w-[52px] h-12 rounded-xl transition-all active:scale-95 ${
+            currentTab === 'live' ? 'text-blue-600 bg-blue-50/80 font-bold' : 'text-gray-500 hover:text-gray-800'
+          }`}
         >
-          <MapPin className="w-6 h-6" />
-          <span className="text-[10px]">Live</span>
+          <MapPin className="w-5 h-5" />
+          <span className="text-[11px] mt-0.5 tracking-tight">Live</span>
         </button>
 
         {/* Floating FAB */}
-        <div className="relative flex justify-center w-16">
+        <div className="relative flex justify-center w-14">
           <button 
             onClick={() => setCurrentTab('employees')}
-            className="absolute -top-10 w-14 h-14 rounded-full bg-gradient-to-tr from-emerald-500 to-emerald-700 border-4 border-white shadow-lg shadow-emerald-600/30 active:scale-95 transition-transform will-change-transform transform-gpu text-white flex items-center justify-center"
+            aria-label="Employees"
+            className="absolute -top-7 w-13 h-13 rounded-full bg-gradient-to-tr from-emerald-600 to-emerald-800 border-4 border-white shadow-xl shadow-emerald-600/30 active:scale-90 transition-all will-change-transform transform-gpu text-white flex items-center justify-center ring-1 ring-black/5"
           >
-            <Users className="w-7 h-7 stroke-2" />
+            <Users className="w-6 h-6 stroke-[2.5]" />
           </button>
         </div>
 
         <button 
           onClick={() => setCurrentTab('invoices')} 
-          className={`flex flex-col items-center justify-center gap-1 w-12 transition-colors active:scale-95 ${currentTab === 'invoices' ? 'text-blue-600 font-semibold' : 'text-gray-400'}`}
+          className={`flex flex-col items-center justify-center min-w-[52px] h-12 rounded-xl transition-all active:scale-95 ${
+            currentTab === 'invoices' ? 'text-blue-600 bg-blue-50/80 font-bold' : 'text-gray-500 hover:text-gray-800'
+          }`}
         >
-          <span className="text-xl leading-none pt-1">📄</span>
-          <span className="text-[10px] mt-1">Billing</span>
+          <FileText className="w-5 h-5" />
+          <span className="text-[11px] mt-0.5 tracking-tight">Billing</span>
         </button>
 
         <button 
           onClick={onMenuClick} 
-          className="flex flex-col items-center justify-center gap-1 w-12 text-gray-400 transition-colors active:scale-95"
+          className="flex flex-col items-center justify-center min-w-[52px] h-12 rounded-xl text-gray-500 hover:text-gray-800 transition-all active:scale-95"
         >
-          <Menu className="w-6 h-6" />
-          <span className="text-[10px]">Menu</span>
+          <Menu className="w-5 h-5" />
+          <span className="text-[11px] mt-0.5 tracking-tight">Menu</span>
         </button>
 
       </div>

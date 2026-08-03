@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { UserProfile, TimeEntry, Coordinates, Task } from './types';
+import { UserProfile, TimeEntry, Coordinates, Task, PayReport } from './types';
 import ProfileSetup from './components/ProfileSetup';
 import TimeLog from './components/TimeLog';
 import { getCurrentPosition } from './services/locationService';
@@ -10,7 +10,7 @@ import Messaging from './components/Messaging';
 import BottomNav from './components/BottomNav';
 import Sidebar from './components/Sidebar';
 import { chatService } from './services/chatService';
-import { Clock, FileText, DollarSign, LayoutGrid, User, CalendarDays, Square, Trash2, Plus, CheckCircle2, Wallet, LogOut, ShieldAlert, MessageSquare, Mic, MicOff, Sparkles, Loader2, Briefcase, Tag, AlertCircle, X, Check, StopCircle, ChevronRight, Camera } from 'lucide-react';
+import { Clock, FileText, DollarSign, LayoutGrid, User, CalendarDays, Square, Trash2, Plus, CheckCircle2, Wallet, LogOut, ShieldAlert, MessageSquare, Mic, MicOff, Sparkles, Loader2, Briefcase, Tag, AlertCircle, X, Check, StopCircle, ChevronRight, Camera, Search, Download, Edit3, Filter } from 'lucide-react';
 import { getDirectImageUrl } from './photoUtils';
 
 export const getEntryDuration = (entry: TimeEntry, fallbackTimeMs: number) => {
@@ -98,6 +98,34 @@ const App: React.FC = () => {
     }, [timeEntries, profile]);
 
     const [projects, setProjects] = useState<string[]>(['General']);
+
+    // Pay Reports persistent state
+    const [payReports, setPayReports] = useState<PayReport[]>(() => {
+        try {
+            const savedUser = localStorage.getItem('currentUser');
+            if (savedUser) {
+                const u = JSON.parse(savedUser);
+                if (u && u.id) {
+                    const savedReports = localStorage.getItem(`geotime_pay_reports_${u.id}`);
+                    return savedReports ? JSON.parse(savedReports) : [];
+                }
+            }
+        } catch {}
+        return [];
+    });
+
+    useEffect(() => {
+        if (profile) {
+            localStorage.setItem(`geotime_pay_reports_${profile.id}`, JSON.stringify(payReports));
+        }
+    }, [payReports, profile]);
+
+    // Pay Log UI sub-tab & modal states
+    const [paylogSubTab, setPaylogSubTab] = useState<'entries' | 'reports'>('entries');
+    const [selectedReportForEdit, setSelectedReportForEdit] = useState<PayReport | null>(null);
+    const [payReportNotification, setPayReportNotification] = useState<string | null>(null);
+    const [payReportFilterStatus, setPayReportFilterStatus] = useState<string>('all');
+    const [payReportSearchQuery, setPayReportSearchQuery] = useState<string>('');
     
     // Tasks & AI Generator States
     const [tasks, setTasks] = useState<Task[]>(() => {
@@ -562,7 +590,7 @@ const App: React.FC = () => {
             })
             .catch(e => console.error('Error loading projects/company info:', e));
 
-            // Load user time entries
+            // Load user time entries & pay reports
             fetch('/api/sync', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -572,26 +600,113 @@ const App: React.FC = () => {
             })
             .then(res => res.json())
             .then(data => {
-                if (data && data.success && data.data && Array.isArray(data.data.entries)) {
-                    const remoteEntries: TimeEntry[] = data.data.entries;
-                    setTimeEntries(prev => {
-                        const map = new Map<string, TimeEntry>();
-                        remoteEntries.forEach(e => map.set(e.id, e));
-                        prev.forEach(e => {
-                            const existing = map.get(e.id);
-                            if (!existing || (!e.clockOut && !e.isExpense)) {
-                                map.set(e.id, e);
-                            }
+                if (data && data.success && data.data) {
+                    if (Array.isArray(data.data.entries)) {
+                        const remoteEntries: TimeEntry[] = data.data.entries;
+                        setTimeEntries(prev => {
+                            const map = new Map<string, TimeEntry>();
+                            remoteEntries.forEach(e => map.set(e.id, e));
+                            prev.forEach(e => {
+                                const existing = map.get(e.id);
+                                if (!existing || (!e.clockOut && !e.isExpense)) {
+                                    map.set(e.id, e);
+                                }
+                            });
+                            return Array.from(map.values()).sort((a, b) => 
+                                new Date(a.clockIn).getTime() - new Date(b.clockIn).getTime()
+                            );
                         });
-                        return Array.from(map.values()).sort((a, b) => 
-                            new Date(a.clockIn).getTime() - new Date(b.clockIn).getTime()
-                        );
-                    });
+                    }
+                    if (Array.isArray(data.data.payReports)) {
+                        setPayReports(data.data.payReports);
+                    }
                 }
             })
-            .catch(e => console.error('Error fetching time entries:', e));
+            .catch(e => console.error('Error fetching user data:', e));
         }
     }, [profile]);
+
+    const handleSavePayReport = async (report: PayReport) => {
+        setPayReports(prev => {
+            const idx = prev.findIndex(r => r.id === report.id);
+            if (idx >= 0) {
+                const updated = [...prev];
+                updated[idx] = report;
+                return updated;
+            }
+            return [report, ...prev];
+        });
+
+        try {
+            await fetch('/api/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    payload: {
+                        action: 'SAVE_PAY_REPORT',
+                        payload: { report }
+                    }
+                })
+            });
+        } catch (err) {
+            console.error('Error saving pay report to Google Apps Script:', err);
+        }
+    };
+
+    const handleDeletePayReport = async (reportId: string) => {
+        if (!confirm('Are you sure you want to delete this saved pay report?')) return;
+        setPayReports(prev => prev.filter(r => r.id !== reportId));
+        if (selectedReportForEdit?.id === reportId) {
+            setSelectedReportForEdit(null);
+        }
+
+        try {
+            await fetch('/api/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    payload: {
+                        action: 'DELETE_PAY_REPORT',
+                        payload: { reportId }
+                    }
+                })
+            });
+        } catch (err) {
+            console.error('Error deleting pay report from Google Apps Script:', err);
+        }
+    };
+
+    const handleExportAndSavePayReport = async () => {
+        if (filteredPaylogEntries.length === 0 || !profile) return;
+
+        const reportId = `REP-${Date.now().toString(36).toUpperCase()}`;
+        const newReport: PayReport = {
+            id: reportId,
+            profileId: profile.id || '',
+            employeeName: profile.name,
+            hourlyWage: profile.hourlyWage,
+            periodLabel: paylogPeriodLabel,
+            generatedAt: new Date().toISOString(),
+            startDate: paylogCustomStartDate || undefined,
+            endDate: paylogCustomEndDate || undefined,
+            projectFilter: paylogFilterProject,
+            totalHours: paylogTotals.hours,
+            totalGrossPay: paylogTotals.earnings,
+            status: 'approved',
+            notes: `Pay report exported for ${paylogPeriodLabel} (${filteredPaylogEntries.length} entries)`,
+            timeEntries: filteredPaylogEntries
+        };
+
+        // 1. Trigger client PDF download
+        generatePayReport(profile, filteredPaylogEntries, paylogPeriodLabel, newReport);
+
+        // 2. Persist in Google Apps Script database & state
+        await handleSavePayReport(newReport);
+
+        // 3. User feedback
+        setPayReportNotification('Pay report generated & securely saved to Google Apps Script!');
+        setTimeout(() => setPayReportNotification(null), 4500);
+    };
 
 
     // Update 'now' every minute so active clock-in time increments
@@ -901,7 +1016,7 @@ const App: React.FC = () => {
                 onLogout={handleLogout}
                 unreadChatCount={unreadChatCount}
             />
-            <div className="w-full max-w-md mx-auto relative flex flex-col h-full overflow-hidden">
+            <div className="w-full md:ml-64 max-w-5xl lg:max-w-7xl mx-auto relative flex flex-col h-full overflow-hidden">
                 
                 {/* Global Header */}
                 <header className="bg-blue-950 text-white px-5 py-4 flex items-center justify-between shrink-0 z-20">
@@ -1367,96 +1482,419 @@ const App: React.FC = () => {
 
                 {currentTab === 'paylog' && (
                     <div className="px-5 mt-6 flex flex-col gap-6">
-                        <div className="flex items-center justify-between mb-2">
-                            <h2 className="text-2xl font-bold text-gray-800">Pay Log</h2>
+                        {/* Success Notification Banner */}
+                        {payReportNotification && (
+                            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-2xl flex items-center justify-between shadow-sm animate-in fade-in duration-300">
+                                <div className="flex items-center gap-2.5">
+                                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                                    <span className="text-xs font-bold">{payReportNotification}</span>
+                                </div>
+                                <button onClick={() => setPayReportNotification(null)} className="text-emerald-500 hover:text-emerald-700">
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Top Header & Export Action */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                                <h2 className="text-2xl font-bold text-gray-800">Pay Log</h2>
+                                <p className="text-xs text-gray-500 mt-0.5">Track live hours & access generated pay reports stored in Google Sheets</p>
+                            </div>
                             <button
-                                onClick={() => generatePayReport(profile, filteredPaylogEntries, paylogPeriodLabel)}
+                                onClick={handleExportAndSavePayReport}
                                 disabled={filteredPaylogEntries.length === 0}
-                                className="bg-[#2563eb] text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                className="bg-[#2563eb] text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all cursor-pointer"
                             >
-                                <FileText className="w-4 h-4" />
-                                Export
+                                <Download className="w-4 h-4" />
+                                Export & Save Report
                             </button>
                         </div>
 
-                        {/* Totals Summary Card */}
-                        <div className="bg-blue-950 rounded-2xl p-5 shadow-lg flex justify-between items-center text-white">
-                            <div>
-                                <p className="text-gray-400 text-xs font-bold tracking-wide mb-1">TOTAL HOURS</p>
-                                <p className="text-3xl font-extrabold">{paylogTotals.hours.toFixed(2)}</p>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-gray-400 text-xs font-bold tracking-wide mb-1">TOTAL EARNINGS</p>
-                                <p className="text-3xl font-extrabold text-[#10b981]">${paylogTotals.earnings.toFixed(2)}</p>
-                            </div>
+                        {/* Sub-navigation Switcher */}
+                        <div className="flex bg-gray-100 p-1.5 rounded-2xl border border-gray-200/80">
+                            <button
+                                onClick={() => setPaylogSubTab('entries')}
+                                className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                                    paylogSubTab === 'entries'
+                                        ? 'bg-white text-gray-900 shadow-sm'
+                                        : 'text-gray-500 hover:text-gray-700'
+                                }`}
+                            >
+                                <Clock className="w-3.5 h-3.5" />
+                                Active Time Entries ({filteredPaylogEntries.length})
+                            </button>
+                            <button
+                                onClick={() => setPaylogSubTab('reports')}
+                                className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                                    paylogSubTab === 'reports'
+                                        ? 'bg-white text-gray-900 shadow-sm'
+                                        : 'text-gray-500 hover:text-gray-700'
+                                }`}
+                            >
+                                <FileText className="w-3.5 h-3.5" />
+                                Saved Pay Reports ({payReports.length})
+                            </button>
                         </div>
 
-                        {/* Filters */}
-                        <div className="flex flex-col gap-3">
-                            <div className="flex gap-3">
-                                <div className="flex-1">
-                                    <label className="block text-xs font-bold text-gray-500 mb-1 ml-1 uppercase">Period</label>
-                                    <select 
-                                        value={paylogDateRange}
-                                        onChange={e => setPaylogDateRange(e.target.value as any)}
-                                        className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-[#2563eb]"
-                                    >
-                                        <option value="this_week">This Week</option>
-                                        <option value="last_week">Last Week</option>
-                                        <option value="this_month">This Month</option>
-                                        <option value="custom">Custom Range</option>
-                                        <option value="all">All Time</option>
-                                    </select>
-                                </div>
-                                <div className="flex-1">
-                                    <label className="block text-xs font-bold text-gray-500 mb-1 ml-1 uppercase">Project</label>
-                                    <select 
-                                        value={paylogFilterProject}
-                                        onChange={e => setPaylogFilterProject(e.target.value)}
-                                        className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-[#2563eb]"
-                                    >
-                                        <option value="All">All Projects</option>
-                                        {projects.map((p, idx) => <option key={idx} value={p}>{p}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-
-                            {paylogDateRange === 'custom' && (
-                                <div className="grid grid-cols-2 gap-3 bg-gray-50 p-3.5 rounded-2xl border border-gray-150 shadow-inner">
+                        {/* MODE 1: ACTIVE TIME ENTRIES */}
+                        {paylogSubTab === 'entries' && (
+                            <div className="flex flex-col gap-6">
+                                {/* Totals Summary Card */}
+                                <div className="bg-blue-950 rounded-2xl p-5 shadow-lg flex justify-between items-center text-white">
                                     <div>
-                                        <label className="block text-[10px] font-extrabold text-gray-400 mb-1 ml-1 uppercase tracking-wider">Start Date</label>
-                                        <input 
-                                            type="date"
-                                            value={paylogCustomStartDate}
-                                            onChange={e => setPaylogCustomStartDate(e.target.value)}
-                                            className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-[#2563eb]"
-                                        />
+                                        <p className="text-gray-400 text-xs font-bold tracking-wide mb-1">TOTAL HOURS</p>
+                                        <p className="text-3xl font-extrabold">{paylogTotals.hours.toFixed(2)}</p>
                                     </div>
-                                    <div>
-                                        <label className="block text-[10px] font-extrabold text-gray-400 mb-1 ml-1 uppercase tracking-wider">End Date</label>
-                                        <input 
-                                            type="date"
-                                            value={paylogCustomEndDate}
-                                            onChange={e => setPaylogCustomEndDate(e.target.value)}
-                                            className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-[#2563eb]"
-                                        />
+                                    <div className="text-right">
+                                        <p className="text-gray-400 text-xs font-bold tracking-wide mb-1">TOTAL EARNINGS</p>
+                                        <p className="text-3xl font-extrabold text-[#10b981]">${paylogTotals.earnings.toFixed(2)}</p>
                                     </div>
                                 </div>
-                            )}
-                        </div>
 
-                        <div className="bg-white rounded-2xl shadow-sm overflow-hidden mb-6">
-                            <TimeLog 
-                                timeEntries={filteredPaylogEntries} 
-                                profile={profile} 
-                                projects={projects}
-                                onUpdateEntry={handleUpdateTimeEntry}
-                                onDeleteEntry={handleDeleteTimeEntry}
-                                onAddEntry={handleAddTimeEntry}
-                                autoEditEntryId={autoEditEntryId}
-                                onClearAutoEdit={() => setAutoEditEntryId(null)}
-                            />
-                        </div>
+                                {/* Filters */}
+                                <div className="flex flex-col gap-3">
+                                    <div className="flex gap-3">
+                                        <div className="flex-1">
+                                            <label className="block text-xs font-bold text-gray-500 mb-1 ml-1 uppercase">Period</label>
+                                            <select 
+                                                value={paylogDateRange}
+                                                onChange={e => setPaylogDateRange(e.target.value as any)}
+                                                className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-[#2563eb]"
+                                            >
+                                                <option value="this_week">This Week</option>
+                                                <option value="last_week">Last Week</option>
+                                                <option value="this_month">This Month</option>
+                                                <option value="custom">Custom Range</option>
+                                                <option value="all">All Time</option>
+                                            </select>
+                                        </div>
+                                        <div className="flex-1">
+                                            <label className="block text-xs font-bold text-gray-500 mb-1 ml-1 uppercase">Project</label>
+                                            <select 
+                                                value={paylogFilterProject}
+                                                onChange={e => setPaylogFilterProject(e.target.value)}
+                                                className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-[#2563eb]"
+                                            >
+                                                <option value="All">All Projects</option>
+                                                {projects.map((p, idx) => <option key={idx} value={p}>{p}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {paylogDateRange === 'custom' && (
+                                        <div className="grid grid-cols-2 gap-3 bg-gray-50 p-3.5 rounded-2xl border border-gray-150 shadow-inner">
+                                            <div>
+                                                <label className="block text-[10px] font-extrabold text-gray-400 mb-1 ml-1 uppercase tracking-wider">Start Date</label>
+                                                <input 
+                                                    type="date"
+                                                    value={paylogCustomStartDate}
+                                                    onChange={e => setPaylogCustomStartDate(e.target.value)}
+                                                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-[#2563eb]"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-extrabold text-gray-400 mb-1 ml-1 uppercase tracking-wider">End Date</label>
+                                                <input 
+                                                    type="date"
+                                                    value={paylogCustomEndDate}
+                                                    onChange={e => setPaylogCustomEndDate(e.target.value)}
+                                                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-[#2563eb]"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="bg-white rounded-2xl shadow-sm overflow-hidden mb-6">
+                                    <TimeLog 
+                                        timeEntries={filteredPaylogEntries} 
+                                        profile={profile} 
+                                        projects={projects}
+                                        onUpdateEntry={handleUpdateTimeEntry}
+                                        onDeleteEntry={handleDeleteTimeEntry}
+                                        onAddEntry={handleAddTimeEntry}
+                                        autoEditEntryId={autoEditEntryId}
+                                        onClearAutoEdit={() => setAutoEditEntryId(null)}
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* MODE 2: SAVED PAY REPORTS */}
+                        {paylogSubTab === 'reports' && (
+                            <div className="flex flex-col gap-5 mb-8">
+                                {/* Search & Status Filter Bar */}
+                                <div className="flex flex-col sm:flex-row gap-3">
+                                    <div className="relative flex-1">
+                                        <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
+                                        <input
+                                            type="text"
+                                            placeholder="Search by report ID, period, or notes..."
+                                            value={payReportSearchQuery}
+                                            onChange={e => setPayReportSearchQuery(e.target.value)}
+                                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-600"
+                                        />
+                                    </div>
+                                    <div className="flex gap-1.5 bg-gray-100 p-1 rounded-xl border border-gray-200 shrink-0 overflow-x-auto">
+                                        {['all', 'approved', 'paid', 'draft'].map((st) => (
+                                            <button
+                                                key={st}
+                                                onClick={() => setPayReportFilterStatus(st)}
+                                                className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-all cursor-pointer ${
+                                                    payReportFilterStatus === st
+                                                        ? 'bg-white text-gray-900 shadow-xs'
+                                                        : 'text-gray-500 hover:text-gray-700'
+                                                }`}
+                                            >
+                                                {st}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Reports Grid */}
+                                {(() => {
+                                    const filteredReports = payReports.filter(r => {
+                                        const matchesStatus = payReportFilterStatus === 'all' || r.status === payReportFilterStatus;
+                                        const query = payReportSearchQuery.toLowerCase();
+                                        const matchesSearch = !query || 
+                                            r.id.toLowerCase().includes(query) || 
+                                            r.periodLabel.toLowerCase().includes(query) || 
+                                            (r.notes && r.notes.toLowerCase().includes(query));
+                                        return matchesStatus && matchesSearch;
+                                    });
+
+                                    if (filteredReports.length === 0) {
+                                        return (
+                                            <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center shadow-xs">
+                                                <FileText className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                                                <h3 className="text-sm font-bold text-gray-700">No Saved Pay Reports Found</h3>
+                                                <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto">
+                                                    When you export a pay report, it will be permanently stored in Google Apps Script and accessible here anytime, anywhere.
+                                                </p>
+                                                <button
+                                                    onClick={() => setPaylogSubTab('entries')}
+                                                    className="mt-4 bg-blue-950 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-gray-800 transition-colors inline-flex items-center gap-2 cursor-pointer"
+                                                >
+                                                    <Clock className="w-3.5 h-3.5" /> View Active Entries
+                                                </button>
+                                            </div>
+                                        );
+                                    }
+
+                                    return (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {filteredReports.map(report => (
+                                                <div key={report.id} className="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs hover:border-blue-300 transition-all flex flex-col justify-between">
+                                                    <div>
+                                                        <div className="flex items-center justify-between mb-3">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-mono text-xs font-extrabold text-blue-900 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100">
+                                                                    #{report.id}
+                                                                </span>
+                                                                <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
+                                                                    report.status === 'paid' 
+                                                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                                                        : report.status === 'approved'
+                                                                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                                                        : 'bg-amber-50 text-amber-700 border-amber-200'
+                                                                }`}>
+                                                                    {report.status}
+                                                                </span>
+                                                            </div>
+                                                            <span className="text-[11px] font-semibold text-gray-400">
+                                                                {new Date(report.generatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                            </span>
+                                                        </div>
+
+                                                        <h3 className="font-bold text-sm text-gray-800">{report.periodLabel}</h3>
+                                                        <p className="text-xs text-gray-500 mt-1">Employee: <span className="font-semibold text-gray-700">{report.employeeName}</span> (${report.hourlyWage}/hr)</p>
+
+                                                        {report.notes && (
+                                                            <p className="text-xs text-gray-600 bg-gray-50 p-2.5 rounded-xl border border-gray-100 mt-3 font-medium line-clamp-2">
+                                                                "{report.notes}"
+                                                            </p>
+                                                        )}
+
+                                                        <div className="grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-gray-100 text-xs">
+                                                            <div>
+                                                                <span className="text-[10px] font-bold text-gray-400 uppercase">Total Hours</span>
+                                                                <p className="font-extrabold text-gray-800 text-base">{report.totalHours.toFixed(2)} hrs</p>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <span className="text-[10px] font-bold text-gray-400 uppercase">Gross Pay</span>
+                                                                <p className="font-extrabold text-emerald-600 text-base">${report.totalGrossPay.toFixed(2)}</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2 mt-5 pt-3 border-t border-gray-100">
+                                                        <button
+                                                            onClick={() => setSelectedReportForEdit(report)}
+                                                            className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                                                        >
+                                                            <Edit3 className="w-3.5 h-3.5 text-gray-500" /> View & Edit
+                                                        </button>
+                                                        <button
+                                                            onClick={() => generatePayReport(profile!, report.timeEntries || [], report.periodLabel, report)}
+                                                            className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold p-2 rounded-xl transition-all cursor-pointer"
+                                                            title="Re-download PDF"
+                                                        >
+                                                            <Download className="w-4 h-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeletePayReport(report.id)}
+                                                            className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs font-bold p-2 rounded-xl transition-all cursor-pointer"
+                                                            title="Delete Report"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        )}
+
+                        {/* EDIT / INSPECT PAY REPORT MODAL */}
+                        {selectedReportForEdit && (
+                            <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+                                <div className="bg-white rounded-3xl max-w-xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl border border-gray-100 flex flex-col gap-5">
+                                    <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="text-lg font-bold text-gray-900">Edit Pay Report</h3>
+                                                <span className="font-mono text-xs bg-blue-50 text-blue-800 px-2 py-0.5 rounded-lg border border-blue-100 font-bold">
+                                                    #{selectedReportForEdit.id}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-gray-500 mt-0.5">Generated {new Date(selectedReportForEdit.generatedAt).toLocaleString()}</p>
+                                        </div>
+                                        <button
+                                            onClick={() => setSelectedReportForEdit(null)}
+                                            className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center transition-all cursor-pointer"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    </div>
+
+                                    <form
+                                        onSubmit={async (e) => {
+                                            e.preventDefault();
+                                            await handleSavePayReport(selectedReportForEdit);
+                                            setSelectedReportForEdit(null);
+                                            setPayReportNotification('Pay report changes saved successfully to Google Apps Script!');
+                                            setTimeout(() => setPayReportNotification(null), 4000);
+                                        }}
+                                        className="flex flex-col gap-4"
+                                    >
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-[10px] font-extrabold text-gray-400 mb-1 uppercase tracking-wider">Employee Name</label>
+                                                <input
+                                                    type="text"
+                                                    value={selectedReportForEdit.employeeName}
+                                                    onChange={e => setSelectedReportForEdit({ ...selectedReportForEdit, employeeName: e.target.value })}
+                                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-600"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-extrabold text-gray-400 mb-1 uppercase tracking-wider">Hourly Wage ($/hr)</label>
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    value={selectedReportForEdit.hourlyWage}
+                                                    onChange={e => {
+                                                        const newWage = parseFloat(e.target.value) || 0;
+                                                        const newGross = selectedReportForEdit.totalHours * newWage;
+                                                        setSelectedReportForEdit({
+                                                            ...selectedReportForEdit,
+                                                            hourlyWage: newWage,
+                                                            totalGrossPay: newGross
+                                                        });
+                                                    }}
+                                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-600"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-[10px] font-extrabold text-gray-400 mb-1 uppercase tracking-wider">Period Label</label>
+                                                <input
+                                                    type="text"
+                                                    value={selectedReportForEdit.periodLabel}
+                                                    onChange={e => setSelectedReportForEdit({ ...selectedReportForEdit, periodLabel: e.target.value })}
+                                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-600"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-extrabold text-gray-400 mb-1 uppercase tracking-wider">Status</label>
+                                                <select
+                                                    value={selectedReportForEdit.status}
+                                                    onChange={e => setSelectedReportForEdit({ ...selectedReportForEdit, status: e.target.value as any })}
+                                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-600"
+                                                >
+                                                    <option value="draft">Draft</option>
+                                                    <option value="approved">Approved</option>
+                                                    <option value="paid">Paid</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[10px] font-extrabold text-gray-400 mb-1 uppercase tracking-wider">Report Notes / Memo</label>
+                                            <textarea
+                                                rows={2}
+                                                value={selectedReportForEdit.notes || ''}
+                                                onChange={e => setSelectedReportForEdit({ ...selectedReportForEdit, notes: e.target.value })}
+                                                placeholder="Add invoice memo or approval remarks..."
+                                                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-blue-600"
+                                            />
+                                        </div>
+
+                                        {/* Entries Summary Table inside Modal */}
+                                        <div className="bg-gray-50 p-3.5 rounded-2xl border border-gray-200">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <span className="text-xs font-bold text-gray-700">Included Time Logs ({selectedReportForEdit.timeEntries?.length || 0})</span>
+                                                <span className="text-xs font-extrabold text-emerald-600">${selectedReportForEdit.totalGrossPay.toFixed(2)}</span>
+                                            </div>
+                                            <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
+                                                {(selectedReportForEdit.timeEntries || []).map((ent, i) => (
+                                                    <div key={i} className="text-[11px] bg-white p-2 rounded-xl border border-gray-150 flex justify-between items-center">
+                                                        <div>
+                                                            <span className="font-bold text-gray-800">{new Date(ent.clockIn).toLocaleDateString()}</span> - <span className="text-gray-600 font-medium">{ent.projectName || 'General'}</span>
+                                                        </div>
+                                                        <span className="font-extrabold text-gray-700">
+                                                            {ent.isExpense ? `$${(ent.expenseAmount || 0).toFixed(2)}` : `${getEntryDuration(ent, new Date().getTime()).toFixed(2)} hrs`}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
+                                            <button
+                                                type="submit"
+                                                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2.5 rounded-xl shadow-sm transition-all cursor-pointer"
+                                            >
+                                                Save Changes
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => generatePayReport(profile!, selectedReportForEdit.timeEntries || [], selectedReportForEdit.periodLabel, selectedReportForEdit)}
+                                                className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold py-2.5 px-3 rounded-xl transition-all flex items-center gap-1 cursor-pointer"
+                                            >
+                                                <Download className="w-3.5 h-3.5" /> Download PDF
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
