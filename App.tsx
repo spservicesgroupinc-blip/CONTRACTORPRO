@@ -9,6 +9,8 @@ import { AdminDashboard } from './components/AdminDashboard';
 import Messaging from './components/Messaging';
 import BottomNav from './components/BottomNav';
 import Sidebar from './components/Sidebar';
+import ShiftReminderBanner from './components/ShiftReminderBanner';
+import { checkAndSendShiftReminders } from './services/reminderService';
 import { chatService } from './services/chatService';
 import { Clock, FileText, DollarSign, LayoutGrid, User, CalendarDays, Square, Trash2, Plus, CheckCircle2, Wallet, LogOut, ShieldAlert, MessageSquare, Mic, MicOff, Sparkles, Loader2, Briefcase, Tag, AlertCircle, X, Check, StopCircle, ChevronRight, Camera, Search, Download, Edit3, Filter } from 'lucide-react';
 import { getDirectImageUrl } from './photoUtils';
@@ -721,6 +723,30 @@ const App: React.FC = () => {
 
     const isClockedIn = !!activeEntry;
 
+    // Automated 8:30 AM (Clock In) and 5:00 PM (Clock Out) Monday-Friday Push Notification Reminders
+    useEffect(() => {
+        // Initial evaluation
+        checkAndSendShiftReminders(isClockedIn);
+
+        // Check every 30 seconds for 8:30 AM or 5:00 PM reminder times
+        const reminderInterval = setInterval(() => {
+            checkAndSendShiftReminders(isClockedIn);
+        }, 30000);
+
+        // Also check on tab visibility change (e.g. unlocking phone or bringing app to foreground)
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                checkAndSendShiftReminders(isClockedIn);
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            clearInterval(reminderInterval);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [isClockedIn]);
+
     const isOnBreak = !!breakStartTime;
 
     // Paylog Filtering logic
@@ -1240,6 +1266,9 @@ const App: React.FC = () => {
                                 </div>
                             </button>
                         </div>
+
+                        {/* Shift Reminder PWA Banner */}
+                        <ShiftReminderBanner />
 
                         {/* Recent Activity */}
                         <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] overflow-hidden">
