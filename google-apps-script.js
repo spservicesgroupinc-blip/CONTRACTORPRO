@@ -177,6 +177,51 @@ function doPost(e) {
     const payload = data.payload || {};
     const ss = getSpreadsheet();
 
+    // 0. USER AUTHENTICATION & LOGIN
+    if (action === "LOGIN_USER" || action === "LOGIN") {
+      const usersSheet = getSheet(ss, "Users");
+      const existingData = usersSheet.getDataRange().getValues();
+      const inputName = (payload.name || "").toString().trim();
+      const inputId = (payload.id || "").toString().trim();
+
+      if (!inputName && !inputId) {
+        return jsonResponse({ success: false, error: "Name or ID is required for login" });
+      }
+
+      let matchedUser = null;
+
+      // Search existing users (Case-insensitive matching for name, or exact match for ID)
+      for (let i = 1; i < existingData.length; i++) {
+        const rowId = String(existingData[i][0] || "").trim();
+        const rowName = String(existingData[i][1] || "").trim();
+        const rowWage = parseFloat(existingData[i][2]) || 0;
+        const rowRole = String(existingData[i][3] || "Employee");
+        const rowCreated = String(existingData[i][4] || "");
+
+        if (inputId && (matchId(rowId, inputId) || rowId.toLowerCase() === inputId.toLowerCase())) {
+          matchedUser = { id: rowId, name: rowName, hourlyWage: rowWage, role: rowRole, createdAt: rowCreated };
+          break;
+        } else if (inputName && rowName.toLowerCase() === inputName.toLowerCase()) {
+          matchedUser = { id: rowId, name: rowName, hourlyWage: rowWage, role: rowRole, createdAt: rowCreated };
+          break;
+        }
+      }
+
+      // If user not found, auto-register them in the sheet so field operations are seamless
+      if (!matchedUser) {
+        const newId = inputId || ("emp_" + Math.random().toString(36).substring(2, 10));
+        const newName = inputName || "Team Member";
+        const newWage = payload.hourlyWage !== undefined ? parseFloat(payload.hourlyWage) : 0;
+        const newRole = payload.role || "Employee";
+        const createdAt = new Date().toISOString();
+
+        usersSheet.appendRow([newId, newName, newWage, newRole, createdAt]);
+        matchedUser = { id: newId, name: newName, hourlyWage: newWage, role: newRole, createdAt: createdAt };
+      }
+
+      return jsonResponse({ success: true, user: matchedUser });
+    }
+
     // 1. FAST ATOMIC CLOCK IN
     if (action === "CLOCK_IN") {
       const timeSheet = getSheet(ss, "TimeEntries");
@@ -721,6 +766,51 @@ function doPost(e) {
         }
       }
       return jsonResponse({ success: true });
+    }
+
+    // 13B. SET BILLED STATUS
+    if (action === "SET_ENTRIES_BILLED_STATUS") {
+      const timeSheet = getSheet(ss, "TimeEntries");
+      const existingData = timeSheet.getDataRange().getValues();
+      const entryIds = payload.entryIds || [];
+      const isBilled = payload.isBilled === true;
+      const idMap = {};
+      entryIds.forEach(function(id) { idMap[String(id).trim()] = true; });
+
+      for (let i = 1; i < existingData.length; i++) {
+        const rowId = String(existingData[i][0] || "").trim();
+        if (idMap[rowId]) {
+          timeSheet.getRange(i + 1, 11).setValue(isBilled ? "TRUE" : "FALSE");
+        }
+      }
+      return jsonResponse({ success: true });
+    }
+
+    // 13C. CUSTOMERS MANAGEMENT
+    if (action === "ADD_CUSTOMER") {
+      const customersSheet = getSheet(ss, "Customers");
+      const cId = payload.id || ("cust_" + Math.random().toString(36).substring(2, 10));
+      const cName = payload.name || "";
+      const cEmail = payload.email || "";
+      const cPhone = payload.phone || "";
+      const cAddress = payload.address || "";
+      const cCreated = payload.createdAt || new Date().toISOString();
+
+      customersSheet.appendRow([cId, cName, cEmail, cPhone, cAddress, cCreated]);
+      return jsonResponse({ success: true, id: cId });
+    }
+
+    if (action === "DELETE_CUSTOMER") {
+      const customersSheet = getSheet(ss, "Customers");
+      const existingData = customersSheet.getDataRange().getValues();
+      const id = String(payload.id);
+      for (let i = 1; i < existingData.length; i++) {
+        if (matchId(existingData[i][0], id)) {
+          customersSheet.deleteRow(i + 1);
+          return jsonResponse({ success: true });
+        }
+      }
+      return jsonResponse({ success: false, error: "Customer not found" });
     }
 
     // 14. JOBS / PROJECTS
