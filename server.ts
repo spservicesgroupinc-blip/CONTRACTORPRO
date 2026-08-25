@@ -219,6 +219,63 @@ async function startServer() {
     }
   });
 
+  // API proxy endpoint: Clock In (Atomic)
+  app.post("/api/clock-in", async (req, res) => {
+    const payload = req.body;
+    const url = process.env.GOOGLE_APPS_SCRIPT_URL;
+
+    if (!url) {
+      return res.status(200).json({ success: true, offline: true, message: "Saved locally (Google Apps Script URL not configured)" });
+    }
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "CLOCK_IN",
+          payload: payload
+        })
+      });
+
+      if (!response.ok) throw new Error(`Status ${response.status}`);
+      const result = await response.json();
+      return res.json(result);
+    } catch (error: any) {
+      console.error("Error proxying clock-in:", error);
+      return res.status(200).json({ success: true, offline: true, error: error.message });
+    }
+  });
+
+  // API proxy endpoint: Clock Out & Auto Clock-Out (Atomic)
+  app.post("/api/clock-out", async (req, res) => {
+    const payload = req.body;
+    const isAuto = payload.autoClockOut === true || req.query.auto === "true";
+    const url = process.env.GOOGLE_APPS_SCRIPT_URL;
+
+    if (!url) {
+      return res.status(200).json({ success: true, offline: true, message: "Saved locally (Google Apps Script URL not configured)" });
+    }
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: isAuto ? "AUTO_CLOCK_OUT" : "CLOCK_OUT",
+          payload: payload
+        })
+      });
+
+      if (!response.ok) throw new Error(`Status ${response.status}`);
+      const result = await response.json();
+      return res.json(result);
+    } catch (error: any) {
+      console.error("Error proxying clock-out:", error);
+      return res.status(200).json({ success: true, offline: true, error: error.message });
+    }
+  });
+
   // API proxy endpoint: Get database state
   app.post("/api/data", async (req, res) => {
     const url = process.env.GOOGLE_APPS_SCRIPT_URL;

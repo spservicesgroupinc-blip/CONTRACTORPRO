@@ -1,207 +1,355 @@
 /**
- * ProContractor - Google Apps Script Backend (Updated)
+ * TKO Field Operations - Google Apps Script Backend (High Performance & Resilient)
  * 
  * Instructions:
- * 1. Create a new Google Spreadsheet (or use an existing one).
- * 2. In the Google Spreadsheet, go to Extensions -> Apps Script.
- * 3. Delete any default code in Code.gs and paste this entire code.
- * 4. Click the "Save" (floppy disk) icon.
+ * Option A (Recommended - Container-Bound):
+ * 1. Open your Google Spreadsheet (or create a new sheet at sheets.new).
+ * 2. In Google Sheets menu, click: Extensions -> Apps Script.
+ * 3. Replace all existing code in Code.gs with this entire script.
+ * 4. Click the Save icon (Ctrl+S or Cmd+S).
  * 5. Click "Deploy" (top right) -> "New deployment".
- * 6. Under "Select type", click the Gear icon and choose "Web app".
- * 7. Set options:
- *    - Description: "ProContractor Backend"
- *    - Execute as: "Me" (your email)
- *    - Who has access: "Anyone" (This is crucial, the proxy server will handle request forwarding).
- * 8. Click "Deploy", approve any permissions requested, and COPY the generated Web App URL.
- * 9. Save this URL in AI Studio Settings as: GOOGLE_APPS_SCRIPT_URL
+ * 6. Click the Gear icon beside "Select type" and choose "Web app".
+ * 7. Set:
+ *    - Description: "TKO Field Operations API"
+ *    - Execute as: "Me" (your account)
+ *    - Who has access: "Anyone"
+ * 8. Click "Deploy", authorize access, and copy the Web App URL.
+ * 9. Paste this URL into your environment variable: GOOGLE_APPS_SCRIPT_URL
+ * 
+ * Option B (Standalone Script at script.google.com):
+ * - If you created this script directly in Google Apps Script (not from a Sheet),
+ *   paste your Google Sheet ID into the SPREADSHEET_ID variable below (or leave blank
+ *   to auto-create "TKO Field Operations Database" in your Drive).
  */
 
-function setup() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  
-  // Users sheet
-  let usersSheet = ss.getSheetByName("Users");
-  if (!usersSheet) {
-    usersSheet = ss.insertSheet("Users");
-    usersSheet.appendRow(["Profile ID", "Name", "Hourly Wage", "Role", "Created At"]);
-    usersSheet.getRange("A1:E1").setFontWeight("bold");
-    usersSheet.setFrozenRows(1);
+// OPTIONAL: If running as a standalone script, paste your Spreadsheet ID here.
+// e.g. var SPREADSHEET_ID = "1aBcDeFgHiJkLmNoPqRsTuVwXyZ123456789";
+var SPREADSHEET_ID = "";
+
+/**
+ * Resilient Spreadsheet Resolver:
+ * Resolves spreadsheet across container-bound, standalone, script properties, or Drive search/creation.
+ */
+function getSpreadsheet() {
+  // 1. Check explicitly specified SPREADSHEET_ID
+  if (typeof SPREADSHEET_ID === "string" && SPREADSHEET_ID.trim() !== "") {
+    try {
+      var ssById = SpreadsheetApp.openById(SPREADSHEET_ID.trim());
+      if (ssById) return ssById;
+    } catch (e) {
+      console.warn("Could not open spreadsheet by SPREADSHEET_ID: " + e.message);
+    }
   }
 
-  // TimeEntries sheet
-  let timeSheet = ss.getSheetByName("TimeEntries");
-  if (!timeSheet) {
-    timeSheet = ss.insertSheet("TimeEntries");
-    timeSheet.appendRow(["Entry ID", "Profile ID", "Project Name", "Clock In Time", "Clock Out Time", "Clock In Lat", "Clock In Lng", "Clock Out Lat", "Clock Out Lng", "Photos", "Is Billed", "Is Expense", "Expense Description", "Expense Amount", "Notes"]);
-    timeSheet.getRange("A1:O1").setFontWeight("bold");
-    timeSheet.setFrozenRows(1);
+  // 2. Check ScriptProperties for previously saved SPREADSHEET_ID
+  try {
+    var savedId = PropertiesService.getScriptProperties().getProperty("SPREADSHEET_ID");
+    if (savedId && savedId.trim() !== "") {
+      var ssByProp = SpreadsheetApp.openById(savedId.trim());
+      if (ssByProp) return ssByProp;
+    }
+  } catch (e) {}
+
+  // 3. Try container-bound active spreadsheet (Extensions -> Apps Script)
+  try {
+    var activeSs = SpreadsheetApp.getActiveSpreadsheet();
+    if (activeSs) return activeSs;
+  } catch (e) {}
+
+  try {
+    var active = SpreadsheetApp.getActive();
+    if (active) return active;
+  } catch (e) {}
+
+  // 4. Standalone script: search Google Drive for existing database sheet
+  try {
+    var files = DriveApp.getFilesByName("TKO Field Operations Database");
+    if (files.hasNext()) {
+      var file = files.next();
+      var foundSs = SpreadsheetApp.open(file);
+      if (foundSs) {
+        try {
+          PropertiesService.getScriptProperties().setProperty("SPREADSHEET_ID", foundSs.getId());
+        } catch (err) {}
+        return foundSs;
+      }
+    }
+  } catch (e) {}
+
+  // 5. Standalone script fallback: Auto-create database spreadsheet in Drive
+  try {
+    var newSs = SpreadsheetApp.create("TKO Field Operations Database");
+    try {
+      PropertiesService.getScriptProperties().setProperty("SPREADSHEET_ID", newSs.getId());
+    } catch (err) {}
+    return newSs;
+  } catch (e) {
+    throw new Error(
+      "Spreadsheet context not found. Please open Google Sheets -> Extensions -> Apps Script to deploy, or set var SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID' at line 25 in Code.gs."
+    );
+  }
+}
+
+/**
+ * Resilient Sheet Retriever:
+ * Handles sheet retrieval and automatic header initialization.
+ */
+function getSheet(ss, sheetName) {
+  if (typeof ss === "string" && !sheetName) {
+    sheetName = ss;
+    ss = getSpreadsheet();
+  } else if (!ss || typeof ss.getSheetByName !== "function") {
+    ss = getSpreadsheet();
   }
 
-  // Projects sheet
-  let projectsSheet = ss.getSheetByName("Projects");
-  if (!projectsSheet) {
-    projectsSheet = ss.insertSheet("Projects");
-    projectsSheet.appendRow(["Project Name", "Created At"]);
-    projectsSheet.getRange("A1:B1").setFontWeight("bold");
-    projectsSheet.appendRow(["General", new Date().toISOString()]);
+  var sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+    initializeSheetHeaders(sheet, sheetName);
   }
+  return sheet;
+}
 
-  // Invoices sheet
-  let invoicesSheet = ss.getSheetByName("Invoices");
-  if (!invoicesSheet) {
-    invoicesSheet = ss.insertSheet("Invoices");
-    invoicesSheet.appendRow(["Invoice ID", "Customer", "Date", "Total", "Payload JSON"]);
-    invoicesSheet.getRange("A1:E1").setFontWeight("bold");
-    invoicesSheet.setFrozenRows(1);
-  }
-
-  // ChatMessages sheet
-  let chatSheet = ss.getSheetByName("ChatMessages");
-  if (!chatSheet) {
-    chatSheet = ss.insertSheet("ChatMessages");
-    chatSheet.appendRow(["Timestamp", "Sender ID", "Sender Name", "Message Text", "Status", "Message ID", "Photo URL"]);
-    chatSheet.getRange("A1:G1").setFontWeight("bold");
-    chatSheet.setFrozenRows(1);
-  }
-
-  // CompanyInfo sheet
-  let companySheet = ss.getSheetByName("CompanyInfo");
-  if (!companySheet) {
-    companySheet = ss.insertSheet("CompanyInfo");
-    companySheet.appendRow(["Key", "Value"]);
-    companySheet.getRange("A1:B1").setFontWeight("bold");
-    companySheet.setFrozenRows(1);
-    companySheet.appendRow(["businessName", "PROCONTRACTOR"]);
-    companySheet.appendRow(["tagline", "PREMIUM TRACKED TIME & FIELD SERVICES INVOICING"]);
-    companySheet.appendRow(["contactLine", "Contact: billing@procontractor.com | Tel: (555) 019-9238"]);
-    companySheet.appendRow(["address", ""]);
-  }
-
-  // Customers sheet
-  let customersSheet = ss.getSheetByName("Customers");
-  if (!customersSheet) {
-    customersSheet = ss.insertSheet("Customers");
-    customersSheet.appendRow(["ID", "Name", "Email", "Phone", "Address", "Created At"]);
-    customersSheet.getRange("A1:F1").setFontWeight("bold");
-    customersSheet.setFrozenRows(1);
-  }
-
-  // PayReports sheet
-  let payReportsSheet = ss.getSheetByName("PayReports");
-  if (!payReportsSheet) {
-    payReportsSheet = ss.insertSheet("PayReports");
-    payReportsSheet.appendRow(["Report ID", "Profile ID", "Employee Name", "Period Label", "Generated At", "Total Hours", "Total Pay", "Status", "Notes", "Payload JSON"]);
-    payReportsSheet.getRange("A1:J1").setFontWeight("bold");
-    payReportsSheet.setFrozenRows(1);
+function initializeSheetHeaders(sheet, name) {
+  if (name === "Users") {
+    sheet.appendRow(["Profile ID", "Name", "Hourly Wage", "Role", "Created At"]);
+    sheet.getRange("A1:E1").setFontWeight("bold");
+    sheet.setFrozenRows(1);
+  } else if (name === "TimeEntries") {
+    sheet.appendRow(["Entry ID", "Profile ID", "Project Name", "Clock In Time", "Clock Out Time", "Clock In Lat", "Clock In Lng", "Clock Out Lat", "Clock Out Lng", "Photos", "Is Billed", "Is Expense", "Expense Description", "Expense Amount", "Notes"]);
+    sheet.getRange("A1:O1").setFontWeight("bold");
+    sheet.setFrozenRows(1);
+  } else if (name === "Projects") {
+    sheet.appendRow(["Project Name", "Created At"]);
+    sheet.getRange("A1:B1").setFontWeight("bold");
+    sheet.appendRow(["General", new Date().toISOString()]);
+    sheet.setFrozenRows(1);
+  } else if (name === "Invoices") {
+    sheet.appendRow(["Invoice ID", "Customer", "Date", "Total", "Payload JSON"]);
+    sheet.getRange("A1:E1").setFontWeight("bold");
+    sheet.setFrozenRows(1);
+  } else if (name === "ChatMessages") {
+    sheet.appendRow(["Timestamp", "Sender ID", "Sender Name", "Message Text", "Status", "Message ID", "Photo URL"]);
+    sheet.getRange("A1:G1").setFontWeight("bold");
+    sheet.setFrozenRows(1);
+  } else if (name === "CompanyInfo") {
+    sheet.appendRow(["Key", "Value"]);
+    sheet.getRange("A1:B1").setFontWeight("bold");
+    sheet.setFrozenRows(1);
+    sheet.appendRow(["businessName", "TKO FIELD OPERATIONS"]);
+    sheet.appendRow(["tagline", "ENTERPRISE FIELD WORKFORCE & TIME OPERATIONS"]);
+    sheet.appendRow(["contactLine", "Contact: dispatch@tkofieldops.com | Tel: (555) 019-9238"]);
+    sheet.appendRow(["address", ""]);
+  } else if (name === "Customers") {
+    sheet.appendRow(["ID", "Name", "Email", "Phone", "Address", "Created At"]);
+    sheet.getRange("A1:F1").setFontWeight("bold");
+    sheet.setFrozenRows(1);
+  } else if (name === "PayReports") {
+    sheet.appendRow(["Report ID", "Profile ID", "Employee Name", "Period Label", "Generated At", "Total Hours", "Total Pay", "Status", "Notes", "Payload JSON"]);
+    sheet.getRange("A1:J1").setFontWeight("bold");
+    sheet.setFrozenRows(1);
   }
 }
 
 function matchId(sheetVal, inputId) {
-  if (sheetVal === inputId) return true;
   if (sheetVal == null || inputId == null) return false;
-  
-  // If sheetVal is a Date object, convert to ISO string
+  if (sheetVal === inputId) return true;
   if (sheetVal instanceof Date) {
     try {
       return sheetVal.toISOString() === String(inputId);
-    } catch (e) {
-      // fallback
-    }
+    } catch (e) {}
   }
-  
-  // Also compare as strings
-  return String(sheetVal) === String(inputId);
+  return String(sheetVal).trim() === String(inputId).trim();
 }
 
 function doPost(e) {
+  const lock = LockService.getScriptLock();
   try {
-    setup();
+    // Acquire lock with 10s wait to ensure atomic database writes across workers
+    lock.tryLock(10000);
+    
+    if (!e || !e.postData || !e.postData.contents) {
+      return jsonResponse({ success: false, error: "Empty request payload" });
+    }
+
     const data = JSON.parse(e.postData.contents);
     const action = data.action;
-    const payload = data.payload;
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    
-    if (action === "UPLOAD_PHOTO") {
-      const base64Data = payload.base64;
-      const mimeType = payload.mimeType || "image/jpeg";
-      const filename = payload.filename || "photo_" + new Date().getTime() + ".jpg";
-      
-      const blob = Utilities.newBlob(Utilities.base64Decode(base64Data.split(',')[1] || base64Data), mimeType, filename);
-      let folder;
-      const folders = DriveApp.getFoldersByName("ProContractor Photos");
-      if (folders.hasNext()) {
-        folder = folders.next();
-      } else {
-        folder = DriveApp.createFolder("ProContractor Photos");
-        folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      }
-      
-      const file = folder.createFile(blob);
-      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      const url = "https://drive.google.com/file/d/" + file.getId() + "/view?usp=sharing";
-      
-      return ContentService.createTextOutput(JSON.stringify({ success: true, data: { url: url, downloadUrl: url } })).setMimeType(ContentService.MimeType.JSON);
-    }
-    
-    if (action === "EDIT_TIME_ENTRY") {
-      const timeSheet = ss.getSheetByName("TimeEntries");
+    const payload = data.payload || {};
+    const ss = getSpreadsheet();
+
+    // 1. FAST ATOMIC CLOCK IN
+    if (action === "CLOCK_IN") {
+      const timeSheet = getSheet(ss, "TimeEntries");
+      const entryId = payload.id || payload.entryId || new Date().toISOString();
+      const profileId = payload.profileId || "";
+      const projectName = payload.projectName || "General";
+      const clockIn = payload.clockIn || new Date().toISOString();
+      const latIn = payload.clockInLocation?.latitude || "";
+      const lngIn = payload.clockInLocation?.longitude || "";
+      const notes = payload.notes || "";
+
+      // Check if user already had an open entry; auto-resolve if older than 9 hours
       const existingData = timeSheet.getDataRange().getValues();
-      const updatedEntry = payload.entry;
+      const inTimestamp = new Date(clockIn).getTime();
+      for (let i = 1; i < existingData.length; i++) {
+        const row = existingData[i];
+        if (matchId(row[1], profileId) && (!row[4] || row[4] === "") && row[11] !== true && row[11] !== "TRUE") {
+          // Found an open shift
+          const prevClockInStr = String(row[3]);
+          const prevInTime = new Date(prevClockInStr).getTime();
+          if (!isNaN(prevInTime)) {
+            const shiftDurationHours = (inTimestamp - prevInTime) / (1000 * 60 * 60);
+            if (shiftDurationHours >= 9) {
+              // Auto clock out old dangling shift at 9-hour limit
+              const autoOutTime = new Date(prevInTime + 9 * 3600 * 1000).toISOString();
+              const autoNote = (row[14] ? row[14] + " | " : "") + "[Auto Clock-Out after 9h limit]";
+              timeSheet.getRange(i + 1, 5).setValue(autoOutTime);
+              timeSheet.getRange(i + 1, 15).setValue(autoNote);
+            }
+          }
+        }
+      }
+
+      // Append new Clock In row
+      timeSheet.appendRow([
+        entryId,
+        profileId,
+        projectName,
+        clockIn,
+        "", // Clock Out Time (empty)
+        latIn,
+        lngIn,
+        "", // Clock Out Lat
+        "", // Clock Out Lng
+        "[]", // Photos
+        "", // isBilled
+        "FALSE", // isExpense
+        "", // expenseDescription
+        "", // expenseAmount
+        notes
+      ]);
+
+      return jsonResponse({ success: true, action: "CLOCK_IN", entryId: entryId, clockIn: clockIn });
+    }
+
+    // 2. FAST ATOMIC CLOCK OUT (Supports Standard and 9h Auto Clock-Out)
+    if (action === "CLOCK_OUT" || action === "AUTO_CLOCK_OUT") {
+      const timeSheet = getSheet(ss, "TimeEntries");
+      const existingData = timeSheet.getDataRange().getValues();
+      const entryId = payload.id || payload.entryId;
+      const profileId = payload.profileId;
+      const clockOut = payload.clockOut || new Date().toISOString();
+      const latOut = payload.clockOutLocation?.latitude || "";
+      const lngOut = payload.clockOutLocation?.longitude || "";
+      const isAuto = action === "AUTO_CLOCK_OUT" || payload.autoClockOut === true;
+      let noteAddition = payload.notes || "";
+      if (isAuto && !noteAddition.includes("[Auto Clock-Out")) {
+        noteAddition = noteAddition ? noteAddition + " | [Auto Clock-Out: 9h limit reached]" : "[Auto Clock-Out: 9h limit reached]";
+      }
+
+      let updatedRow = -1;
+
+      // Match by exact entryId first
+      if (entryId) {
+        for (let i = 1; i < existingData.length; i++) {
+          if (matchId(existingData[i][0], entryId)) {
+            updatedRow = i + 1;
+            break;
+          }
+        }
+      }
+
+      // If not found by entryId, find latest unclosed entry for this profileId
+      if (updatedRow === -1 && profileId) {
+        for (let i = existingData.length - 1; i >= 1; i--) {
+          const row = existingData[i];
+          if (matchId(row[1], profileId) && (!row[4] || row[4] === "") && row[11] !== true && row[11] !== "TRUE") {
+            updatedRow = i + 1;
+            break;
+          }
+        }
+      }
+
+      if (updatedRow !== -1) {
+        const rowData = existingData[updatedRow - 1];
+        const existingNotes = String(rowData[14] || "");
+        const finalNotes = noteAddition 
+          ? (existingNotes ? existingNotes + "\n" + noteAddition : noteAddition)
+          : existingNotes;
+
+        // Fast batch range update (cols 5 to 15)
+        timeSheet.getRange(updatedRow, 5).setValue(clockOut);
+        if (latOut) timeSheet.getRange(updatedRow, 8).setValue(latOut);
+        if (lngOut) timeSheet.getRange(updatedRow, 9).setValue(lngOut);
+        if (finalNotes) timeSheet.getRange(updatedRow, 15).setValue(finalNotes);
+
+        return jsonResponse({ success: true, action: "CLOCK_OUT", entryId: rowData[0], clockOut: clockOut, isAuto: isAuto });
+      }
+
+      return jsonResponse({ success: false, error: "Active entry not found to clock out" });
+    }
+
+    // 3. EDIT TIME ENTRY
+    if (action === "EDIT_TIME_ENTRY") {
+      const timeSheet = getSheet(ss, "TimeEntries");
+      const existingData = timeSheet.getDataRange().getValues();
+      const updatedEntry = payload.entry || payload;
       if (!updatedEntry || !updatedEntry.id) {
-         return ContentService.createTextOutput(JSON.stringify({ success: false, error: "No entry ID" })).setMimeType(ContentService.MimeType.JSON);
+        return jsonResponse({ success: false, error: "No entry ID" });
       }
       for (let i = 1; i < existingData.length; i++) {
         if (matchId(existingData[i][0], updatedEntry.id)) {
-           timeSheet.getRange(i + 1, 3).setValue(updatedEntry.projectName || "");
-           timeSheet.getRange(i + 1, 4).setValue(updatedEntry.clockIn || "");
-           timeSheet.getRange(i + 1, 5).setValue(updatedEntry.clockOut || "");
-           timeSheet.getRange(i + 1, 6).setValue(updatedEntry.clockInLocation?.latitude || "");
-           timeSheet.getRange(i + 1, 7).setValue(updatedEntry.clockInLocation?.longitude || "");
-           timeSheet.getRange(i + 1, 8).setValue(updatedEntry.clockOutLocation?.latitude || "");
-           timeSheet.getRange(i + 1, 9).setValue(updatedEntry.clockOutLocation?.longitude || "");
-           if (updatedEntry.photos) {
-              timeSheet.getRange(i + 1, 10).setValue(JSON.stringify(updatedEntry.photos));
-           }
-           timeSheet.getRange(i + 1, 12).setValue(updatedEntry.isExpense ? "TRUE" : "FALSE");
-           timeSheet.getRange(i + 1, 13).setValue(updatedEntry.expenseDescription || "");
-           timeSheet.getRange(i + 1, 14).setValue(updatedEntry.expenseAmount !== undefined ? updatedEntry.expenseAmount : "");
-           timeSheet.getRange(i + 1, 15).setValue(updatedEntry.notes || "");
-           return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+          const r = i + 1;
+          timeSheet.getRange(r, 3).setValue(updatedEntry.projectName || "General");
+          timeSheet.getRange(r, 4).setValue(updatedEntry.clockIn || "");
+          timeSheet.getRange(r, 5).setValue(updatedEntry.clockOut || "");
+          timeSheet.getRange(r, 6).setValue(updatedEntry.clockInLocation?.latitude || "");
+          timeSheet.getRange(r, 7).setValue(updatedEntry.clockInLocation?.longitude || "");
+          timeSheet.getRange(r, 8).setValue(updatedEntry.clockOutLocation?.latitude || "");
+          timeSheet.getRange(r, 9).setValue(updatedEntry.clockOutLocation?.longitude || "");
+          if (updatedEntry.photos) {
+            timeSheet.getRange(r, 10).setValue(JSON.stringify(updatedEntry.photos));
+          }
+          timeSheet.getRange(r, 12).setValue(updatedEntry.isExpense ? "TRUE" : "FALSE");
+          timeSheet.getRange(r, 13).setValue(updatedEntry.expenseDescription || "");
+          timeSheet.getRange(r, 14).setValue(updatedEntry.expenseAmount !== undefined ? updatedEntry.expenseAmount : "");
+          timeSheet.getRange(r, 15).setValue(updatedEntry.notes || "");
+          return jsonResponse({ success: true });
         }
       }
-      return ContentService.createTextOutput(JSON.stringify({ success: false, error: "Entry not found" })).setMimeType(ContentService.MimeType.JSON);
+      return jsonResponse({ success: false, error: "Entry not found" });
     }
-    
+
+    // 4. DELETE TIME ENTRY
     if (action === "DELETE_TIME_ENTRY") {
-      const timeSheet = ss.getSheetByName("TimeEntries");
+      const timeSheet = getSheet(ss, "TimeEntries");
       const existingData = timeSheet.getDataRange().getValues();
-      const entryId = payload.entryId;
-      if (!entryId) {
-         return ContentService.createTextOutput(JSON.stringify({ success: false, error: "No entry ID" })).setMimeType(ContentService.MimeType.JSON);
-      }
+      const entryId = payload.entryId || payload.id;
+      if (!entryId) return jsonResponse({ success: false, error: "No entry ID" });
       for (let i = 1; i < existingData.length; i++) {
         if (matchId(existingData[i][0], entryId)) {
-           timeSheet.deleteRow(i + 1);
-           return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+          timeSheet.deleteRow(i + 1);
+          return jsonResponse({ success: true });
         }
       }
-      return ContentService.createTextOutput(JSON.stringify({ success: false, error: "Entry not found" })).setMimeType(ContentService.MimeType.JSON);
+      return jsonResponse({ success: false, error: "Entry not found" });
     }
-    
+
+    // 5. HIGH-SPEED SYNC ENTRIES
     if (action === "SYNC_ENTRIES") {
-      const timeSheet = ss.getSheetByName("TimeEntries");
+      const timeSheet = getSheet(ss, "TimeEntries");
       const existingData = timeSheet.getDataRange().getValues();
       const profileId = payload.profileId || "";
-      
       const newEntries = payload.entries || [];
+      
       const newEntriesMap = {};
       newEntries.forEach(function(e) {
         newEntriesMap[e.id] = e;
       });
-      
-      const existingIdsInPayload = new Set();
-      
-      // Iterate backwards to safely handle deletion of rows
+
+      const existingIdsInPayload = {};
+
+      // Loop backwards through existing rows
       for (let i = existingData.length - 1; i >= 1; i--) {
         const rowId = existingData[i][0];
         const rowProfileId = existingData[i][1];
@@ -211,31 +359,32 @@ function doPost(e) {
             // Delete locally deleted entry
             timeSheet.deleteRow(i + 1);
           } else {
-            // Update all fields of the existing entry
+            // Update existing entry
             const entry = newEntriesMap[rowId];
             const rowIndex = i + 1;
-            timeSheet.getRange(rowIndex, 3).setValue(entry.projectName || "General");
-            timeSheet.getRange(rowIndex, 4).setValue(entry.clockIn || "");
-            timeSheet.getRange(rowIndex, 5).setValue(entry.clockOut || "");
-            timeSheet.getRange(rowIndex, 6).setValue(entry.clockInLocation?.latitude || "");
-            timeSheet.getRange(rowIndex, 7).setValue(entry.clockInLocation?.longitude || "");
-            timeSheet.getRange(rowIndex, 8).setValue(entry.clockOutLocation?.latitude || "");
-            timeSheet.getRange(rowIndex, 9).setValue(entry.clockOutLocation?.longitude || "");
-            timeSheet.getRange(rowIndex, 10).setValue(entry.photos ? JSON.stringify(entry.photos) : "[]");
-            timeSheet.getRange(rowIndex, 12).setValue(entry.isExpense ? "TRUE" : "FALSE");
-            timeSheet.getRange(rowIndex, 13).setValue(entry.expenseDescription || "");
-            timeSheet.getRange(rowIndex, 14).setValue(entry.expenseAmount !== undefined ? entry.expenseAmount : "");
-            timeSheet.getRange(rowIndex, 15).setValue(entry.notes || "");
-            
-            existingIdsInPayload.add(rowId);
+            timeSheet.getRange(rowIndex, 3, 1, 13).setValues([[
+              entry.projectName || "General",
+              entry.clockIn || "",
+              entry.clockOut || "",
+              entry.clockInLocation?.latitude || "",
+              entry.clockInLocation?.longitude || "",
+              entry.clockOutLocation?.latitude || "",
+              entry.clockOutLocation?.longitude || "",
+              entry.photos ? JSON.stringify(entry.photos) : "[]",
+              existingData[i][10] || "", // isBilled
+              entry.isExpense ? "TRUE" : "FALSE",
+              entry.expenseDescription || "",
+              entry.expenseAmount !== undefined ? entry.expenseAmount : "",
+              entry.notes || ""
+            ]]);
+            existingIdsInPayload[rowId] = true;
           }
         }
       }
-      
+
       // Add any brand-new entries
       newEntries.forEach(function(entry) {
-        if (!existingIdsInPayload.has(entry.id)) {
-          // Double check to avoid global duplicate IDs
+        if (!existingIdsInPayload[entry.id]) {
           let existsOverall = false;
           for (let i = 1; i < existingData.length; i++) {
             if (matchId(existingData[i][0], entry.id)) {
@@ -255,7 +404,7 @@ function doPost(e) {
               entry.clockOutLocation?.latitude || "",
               entry.clockOutLocation?.longitude || "",
               entry.photos ? JSON.stringify(entry.photos) : "[]",
-              "", // isBilled (defaults empty)
+              "",
               entry.isExpense ? "TRUE" : "FALSE",
               entry.expenseDescription || "",
               entry.expenseAmount !== undefined ? entry.expenseAmount : "",
@@ -264,194 +413,55 @@ function doPost(e) {
           }
         }
       });
-      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Sync complete" })).setMimeType(ContentService.MimeType.JSON);
+
+      return jsonResponse({ success: true, message: "Sync complete" });
     }
-    
+
+    // 6. SAVE PROFILE
     if (action === "SAVE_PROFILE") {
-      const usersSheet = ss.getSheetByName("Users");
+      const usersSheet = getSheet(ss, "Users");
       const existingData = usersSheet.getDataRange().getValues();
       let found = false;
       for (let i = 1; i < existingData.length; i++) {
         if (matchId(existingData[i][0], payload.id)) {
           found = true;
-          // Update wage and name
           usersSheet.getRange(i + 1, 2).setValue(payload.name);
           usersSheet.getRange(i + 1, 3).setValue(payload.hourlyWage);
           break;
         }
       }
-      if (!found) {
+      if (!found && payload.id) {
         usersSheet.appendRow([payload.id, payload.name, payload.hourlyWage, "Employee", new Date().toISOString()]);
       }
-      return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
-    }
-    
-    if (action === "FETCH_ADMIN_DATA") {
-      const usersSheet = ss.getSheetByName("Users");
-      const timeSheet = ss.getSheetByName("TimeEntries");
-      const invoicesSheet = ss.getSheetByName("Invoices");
-      const projectsSheet = ss.getSheetByName("Projects");
-      const companySheet = ss.getSheetByName("CompanyInfo");
-      const customersSheet = ss.getSheetByName("Customers");
-      
-      const uData = usersSheet ? usersSheet.getDataRange().getValues() : [];
-      const tData = timeSheet ? timeSheet.getDataRange().getValues() : [];
-      const iData = invoicesSheet ? invoicesSheet.getDataRange().getValues() : [];
-      const pData = projectsSheet ? projectsSheet.getDataRange().getValues() : [];
-      const cInfoData = companySheet ? companySheet.getDataRange().getValues() : [];
-      const cData = customersSheet ? customersSheet.getDataRange().getValues() : [];
-      
-      let users = [];
-      if (uData.length > 1) {
-          users = uData.slice(1).map(r => ({ id: r[0], name: r[1], hourlyWage: r[2], role: r[3] }));
-      }
-      
-      let entries = [];
-      if (tData.length > 1) {
-          entries = tData.slice(1).map(r => ({
-             id: r[0],
-             profileId: r[1],
-             projectName: r[2],
-             clockIn: r[3],
-             clockOut: r[4],
-             clockInLocation: r[5] ? { latitude: r[5], longitude: r[6] } : null,
-             clockOutLocation: r[7] ? { latitude: r[7], longitude: r[8] } : null,
-             photos: r[9] ? JSON.parse(r[9]) : [],
-             isBilled: r[10] === true || r[10] === "TRUE" || r[10] === "true" || r[10] === 1 || r[10] === "1",
-             isExpense: r[11] === true || r[11] === "TRUE" || r[11] === "true",
-             expenseDescription: r[12] || "",
-             expenseAmount: r[13] ? parseFloat(r[13]) : undefined,
-             notes: r[14] || ""
-          }));
-      }
-
-      let invoices = [];
-      if (iData.length > 1) {
-          invoices = iData.slice(1).map(r => {
-             try {
-                return JSON.parse(r[4]);
-             } catch(e) {
-                return null;
-             }
-          }).filter(i => i !== null);
-      }
-
-      let projects = ["General"];
-      if (pData.length > 1) {
-          projects = pData.slice(1).map(r => r[0]).filter(Boolean);
-      }
-
-      let customers = [];
-      if (cData.length > 1) {
-          customers = cData.slice(1).map(r => ({
-              id: r[0],
-              name: r[1],
-              email: r[2],
-              phone: r[3],
-              address: r[4],
-              createdAt: r[5]
-          }));
-      }
-
-      let companyInfo = {
-        businessName: 'PROCONTRACTOR',
-        tagline: 'PREMIUM TRACKED TIME & FIELD SERVICES INVOICING',
-        contactLine: 'Contact: billing@procontractor.com | Tel: (555) 019-9238',
-        address: ''
-      };
-      if (cInfoData.length > 1) {
-        cInfoData.slice(1).forEach(r => {
-           if (r[0]) {
-             companyInfo[r[0]] = r[1];
-           }
-        });
-      }
-
-      const payReportsSheet = ss.getSheetByName("PayReports");
-      const prData = payReportsSheet ? payReportsSheet.getDataRange().getValues() : [];
-      let payReports = [];
-      if (prData.length > 1) {
-        payReports = prData.slice(1).map(r => {
-          try {
-            return JSON.parse(r[9]);
-          } catch(e) {
-            return null;
-          }
-        }).filter(r => r !== null);
-      }
-      
-      return ContentService.createTextOutput(JSON.stringify({ success: true, data: { users, entries, invoices, projects, customers, companyInfo, payReports } })).setMimeType(ContentService.MimeType.JSON);
-    }
-    
-    if (action === "LOGIN_USER") {
-      const usersSheet = ss.getSheetByName("Users");
-      const uData = usersSheet ? usersSheet.getDataRange().getValues() : [];
-      let user = null;
-      for (let i = 1; i < uData.length; i++) {
-        if (uData[i][1] && uData[i][1].toString().trim().toLowerCase() === payload.name.toString().trim().toLowerCase()) {
-          user = {
-            id: uData[i][0],
-            name: uData[i][1],
-            hourlyWage: uData[i][2]
-          };
-          break;
-        }
-      }
-      
-      if (user) {
-        return ContentService.createTextOutput(JSON.stringify({ success: true, user })).setMimeType(ContentService.MimeType.JSON);
-      } else {
-        return ContentService.createTextOutput(JSON.stringify({ success: false, error: "User not found. Please contact your administrator." })).setMimeType(ContentService.MimeType.JSON);
-      }
+      return jsonResponse({ success: true });
     }
 
-    if (action === "SAVE_COMPANY_INFO") {
-      const companySheet = ss.getSheetByName("CompanyInfo");
-      const existingData = companySheet.getDataRange().getValues();
-      const keys = Object.keys(payload);
-      
-      keys.forEach(k => {
-         let found = false;
-         for (let i = 1; i < existingData.length; i++) {
-           if (existingData[i][0] === k) {
-             companySheet.getRange(i + 1, 2).setValue(String(payload[k] || ""));
-             found = true;
-             break;
-           }
-         }
-         if (!found) {
-           companySheet.appendRow([k, String(payload[k] || "")]);
-           existingData.push([k, String(payload[k] || "")]);
-         }
-      });
-      return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
-    }
-    
+    // 7. FETCH USER DATA (High Performance)
     if (action === "FETCH_USER_DATA") {
-      const timeSheet = ss.getSheetByName("TimeEntries");
+      const timeSheet = getSheet(ss, "TimeEntries");
       const tData = timeSheet ? timeSheet.getDataRange().getValues() : [];
       let entries = [];
       if (tData.length > 1) {
-          entries = tData.slice(1)
-            .filter(r => matchId(r[1], payload.profileId))
-            .map(r => ({
-               id: r[0],
-               profileId: r[1],
-               projectName: r[2],
-               clockIn: r[3],
-               clockOut: r[4],
-               clockInLocation: r[5] ? { latitude: r[5], longitude: r[6] } : null,
-               clockOutLocation: r[7] ? { latitude: r[7], longitude: r[8] } : null,
-               photos: r[9] ? JSON.parse(r[9]) : [],
-               isBilled: r[10] === true || r[10] === "TRUE" || r[10] === "true" || r[10] === 1 || r[10] === "1",
-               isExpense: r[11] === true || r[11] === "TRUE" || r[11] === "true",
-               expenseDescription: r[12] || "",
-               expenseAmount: r[13] ? parseFloat(r[13]) : undefined,
-               notes: r[14] || ""
-            }));
+        entries = tData.slice(1)
+          .filter(r => matchId(r[1], payload.profileId))
+          .map(r => ({
+            id: String(r[0]),
+            profileId: String(r[1]),
+            projectName: String(r[2] || "General"),
+            clockIn: r[3] instanceof Date ? r[3].toISOString() : String(r[3] || ""),
+            clockOut: r[4] instanceof Date ? r[4].toISOString() : (r[4] ? String(r[4]) : undefined),
+            clockInLocation: r[5] ? { latitude: Number(r[5]), longitude: Number(r[6]) } : undefined,
+            clockOutLocation: r[7] ? { latitude: Number(r[7]), longitude: Number(r[8]) } : undefined,
+            photos: r[9] ? (typeof r[9] === "string" ? safeJsonParse(r[9], []) : r[9]) : [],
+            isBilled: r[10] === true || r[10] === "TRUE" || r[10] === "true" || r[10] === 1 || r[10] === "1",
+            isExpense: r[11] === true || r[11] === "TRUE" || r[11] === "true",
+            expenseDescription: r[12] ? String(r[12]) : undefined,
+            expenseAmount: r[13] !== "" && r[13] !== undefined ? parseFloat(r[13]) : undefined,
+            notes: r[14] ? String(r[14]) : undefined
+          }));
       }
 
-      const payReportsSheet = ss.getSheetByName("PayReports");
+      const payReportsSheet = getSheet(ss, "PayReports");
       const prData = payReportsSheet ? payReportsSheet.getDataRange().getValues() : [];
       let payReports = [];
       if (prData.length > 1) {
@@ -464,37 +474,135 @@ function doPost(e) {
         }).filter(r => r !== null && matchId(r.profileId, payload.profileId));
       }
 
-      return ContentService.createTextOutput(JSON.stringify({ success: true, data: { entries, payReports } })).setMimeType(ContentService.MimeType.JSON);
+      return jsonResponse({ success: true, data: { entries, payReports } });
     }
 
-    if (action === "SAVE_PAY_REPORT") {
-      const payReportsSheet = ss.getSheetByName("PayReports");
-      if (!payReportsSheet) {
-        return ContentService.createTextOutput(JSON.stringify({ success: false, error: "PayReports sheet not found" })).setMimeType(ContentService.MimeType.JSON);
+    // 8. FETCH ADMIN DATA
+    if (action === "FETCH_ADMIN_DATA") {
+      const usersSheet = getSheet(ss, "Users");
+      const timeSheet = getSheet(ss, "TimeEntries");
+      const invoicesSheet = getSheet(ss, "Invoices");
+      const projectsSheet = getSheet(ss, "Projects");
+      const companySheet = getSheet(ss, "CompanyInfo");
+      const customersSheet = getSheet(ss, "Customers");
+      const payReportsSheet = getSheet(ss, "PayReports");
+
+      const uData = usersSheet.getDataRange().getValues();
+      const tData = timeSheet.getDataRange().getValues();
+      const iData = invoicesSheet.getDataRange().getValues();
+      const pData = projectsSheet.getDataRange().getValues();
+      const cInfoData = companySheet.getDataRange().getValues();
+      const cData = customersSheet.getDataRange().getValues();
+      const prData = payReportsSheet.getDataRange().getValues();
+
+      let users = [];
+      if (uData.length > 1) {
+        users = uData.slice(1).map(r => ({ id: r[0], name: r[1], hourlyWage: r[2], role: r[3] }));
       }
-      const data = payReportsSheet.getDataRange().getValues();
-      const report = payload.report;
-      if (!report || !report.id) {
-        return ContentService.createTextOutput(JSON.stringify({ success: false, error: "Missing report ID" })).setMimeType(ContentService.MimeType.JSON);
+
+      let entries = [];
+      if (tData.length > 1) {
+        entries = tData.slice(1).map(r => ({
+          id: String(r[0]),
+          profileId: String(r[1]),
+          projectName: String(r[2] || "General"),
+          clockIn: r[3] instanceof Date ? r[3].toISOString() : String(r[3] || ""),
+          clockOut: r[4] instanceof Date ? r[4].toISOString() : (r[4] ? String(r[4]) : undefined),
+          clockInLocation: r[5] ? { latitude: Number(r[5]), longitude: Number(r[6]) } : undefined,
+          clockOutLocation: r[7] ? { latitude: Number(r[7]), longitude: Number(r[8]) } : undefined,
+          photos: r[9] ? safeJsonParse(r[9], []) : [],
+          isBilled: r[10] === true || r[10] === "TRUE" || r[10] === "true" || r[10] === 1 || r[10] === "1",
+          isExpense: r[11] === true || r[11] === "TRUE" || r[11] === "true",
+          expenseDescription: r[12] ? String(r[12]) : undefined,
+          expenseAmount: r[13] ? parseFloat(r[13]) : undefined,
+          notes: r[14] ? String(r[14]) : ""
+        }));
+      }
+
+      let invoices = [];
+      if (iData.length > 1) {
+        invoices = iData.slice(1).map(r => safeJsonParse(r[4], null)).filter(Boolean);
+      }
+
+      let projects = ["General"];
+      if (pData.length > 1) {
+        projects = pData.slice(1).map(r => r[0]).filter(Boolean);
+      }
+
+      let customers = [];
+      if (cData.length > 1) {
+        customers = cData.slice(1).map(r => ({
+          id: r[0], name: r[1], email: r[2], phone: r[3], address: r[4], createdAt: r[5]
+        }));
+      }
+
+      let companyInfo = {
+        businessName: 'TKO FIELD OPERATIONS',
+        tagline: 'ENTERPRISE FIELD WORKFORCE & TIME OPERATIONS',
+        contactLine: 'Contact: dispatch@tkofieldops.com | Tel: (555) 019-9238',
+        address: ''
+      };
+      if (cInfoData.length > 1) {
+        cInfoData.slice(1).forEach(r => {
+          if (r[0]) companyInfo[r[0]] = r[1];
+        });
+      }
+
+      let payReports = [];
+      if (prData.length > 1) {
+        payReports = prData.slice(1).map(r => safeJsonParse(r[9], null)).filter(Boolean);
+      }
+
+      return jsonResponse({ success: true, data: { users, entries, invoices, projects, customers, companyInfo, payReports } });
+    }
+
+    // 9. PHOTO UPLOADS
+    if (action === "UPLOAD_PHOTO") {
+      const base64Data = payload.base64;
+      const mimeType = payload.mimeType || "image/jpeg";
+      const filename = payload.filename || "photo_" + new Date().getTime() + ".jpg";
+      
+      const blob = Utilities.newBlob(Utilities.base64Decode(base64Data.split(',')[1] || base64Data), mimeType, filename);
+      let folder;
+      const folders = DriveApp.getFoldersByName("TKO Field Operations Photos");
+      if (folders.hasNext()) {
+        folder = folders.next();
+      } else {
+        folder = DriveApp.createFolder("TKO Field Operations Photos");
+        folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
       }
       
+      const file = folder.createFile(blob);
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      const url = "https://drive.google.com/file/d/" + file.getId() + "/view?usp=sharing";
+      
+      return jsonResponse({ success: true, data: { url: url, downloadUrl: url } });
+    }
+
+    // 10. PAY REPORT ACTIONS
+    if (action === "SAVE_PAY_REPORT") {
+      const payReportsSheet = getSheet(ss, "PayReports");
+      const report = payload.report || payload;
+      if (!report || !report.id) return jsonResponse({ success: false, error: "Missing report ID" });
+      const data = payReportsSheet.getDataRange().getValues();
       let updated = false;
       for (let i = 1; i < data.length; i++) {
         if (matchId(data[i][0], report.id)) {
-          payReportsSheet.getRange(i + 1, 2).setValue(report.profileId || "");
-          payReportsSheet.getRange(i + 1, 3).setValue(report.employeeName || "");
-          payReportsSheet.getRange(i + 1, 4).setValue(report.periodLabel || "");
-          payReportsSheet.getRange(i + 1, 5).setValue(report.generatedAt || new Date().toISOString());
-          payReportsSheet.getRange(i + 1, 6).setValue(report.totalHours !== undefined ? report.totalHours : 0);
-          payReportsSheet.getRange(i + 1, 7).setValue(report.totalGrossPay !== undefined ? report.totalGrossPay : 0);
-          payReportsSheet.getRange(i + 1, 8).setValue(report.status || "approved");
-          payReportsSheet.getRange(i + 1, 9).setValue(report.notes || "");
-          payReportsSheet.getRange(i + 1, 10).setValue(JSON.stringify(report));
+          payReportsSheet.getRange(i + 1, 2, 1, 9).setValues([[
+            report.profileId || "",
+            report.employeeName || "",
+            report.periodLabel || "",
+            report.generatedAt || new Date().toISOString(),
+            report.totalHours !== undefined ? report.totalHours : 0,
+            report.totalGrossPay !== undefined ? report.totalGrossPay : 0,
+            report.status || "approved",
+            report.notes || "",
+            JSON.stringify(report)
+          ]]);
           updated = true;
           break;
         }
       }
-      
       if (!updated) {
         payReportsSheet.appendRow([
           report.id,
@@ -509,228 +617,142 @@ function doPost(e) {
           JSON.stringify(report)
         ]);
       }
-      
-      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Pay report saved successfully" })).setMimeType(ContentService.MimeType.JSON);
+      return jsonResponse({ success: true });
     }
 
     if (action === "DELETE_PAY_REPORT") {
-      const payReportsSheet = ss.getSheetByName("PayReports");
-      if (!payReportsSheet) {
-        return ContentService.createTextOutput(JSON.stringify({ success: false, error: "PayReports sheet not found" })).setMimeType(ContentService.MimeType.JSON);
-      }
+      const payReportsSheet = getSheet(ss, "PayReports");
       const data = payReportsSheet.getDataRange().getValues();
       const reportId = payload.reportId || payload.id;
-      let deleted = false;
       for (let i = 1; i < data.length; i++) {
         if (matchId(data[i][0], reportId)) {
           payReportsSheet.deleteRow(i + 1);
-          deleted = true;
-          break;
+          return jsonResponse({ success: true });
         }
       }
-      return ContentService.createTextOutput(JSON.stringify({ success: deleted })).setMimeType(ContentService.MimeType.JSON);
+      return jsonResponse({ success: false, error: "Report not found" });
     }
 
-    if (action === "FETCH_PAY_REPORTS") {
-      const payReportsSheet = ss.getSheetByName("PayReports");
-      const prData = payReportsSheet ? payReportsSheet.getDataRange().getValues() : [];
-      let payReports = [];
-      if (prData.length > 1) {
-        payReports = prData.slice(1).map(r => {
-          try {
-            return JSON.parse(r[9]);
-          } catch(e) {
-            return {
-              id: String(r[0]),
-              profileId: String(r[1]),
-              employeeName: String(r[2]),
-              periodLabel: String(r[3]),
-              generatedAt: String(r[4]),
-              totalHours: parseFloat(r[5]) || 0,
-              totalGrossPay: parseFloat(r[6]) || 0,
-              status: String(r[7] || "approved"),
-              notes: String(r[8] || ""),
-              timeEntries: []
-            };
+    // 11. COMPANY INFO
+    if (action === "SAVE_COMPANY_INFO") {
+      const companySheet = getSheet(ss, "CompanyInfo");
+      const existingData = companySheet.getDataRange().getValues();
+      const keys = Object.keys(payload);
+      keys.forEach(k => {
+        let found = false;
+        for (let i = 1; i < existingData.length; i++) {
+          if (existingData[i][0] === k) {
+            companySheet.getRange(i + 1, 2).setValue(String(payload[k] || ""));
+            found = true;
+            break;
           }
-        }).filter(r => r !== null);
-        
-        if (payload && payload.profileId) {
-          payReports = payReports.filter(r => matchId(r.profileId, payload.profileId));
         }
-      }
-      return ContentService.createTextOutput(JSON.stringify({ success: true, data: { payReports } })).setMimeType(ContentService.MimeType.JSON);
+        if (!found) {
+          companySheet.appendRow([k, String(payload[k] || "")]);
+        }
+      });
+      return jsonResponse({ success: true });
     }
-    
+
+    // 12. EMPLOYEE MANAGEMENT
     if (action === "ADD_EMPLOYEE") {
-      const usersSheet = ss.getSheetByName("Users");
-      const id = payload.id;
-      usersSheet.appendRow([id, payload.name, payload.hourlyWage, "Employee", new Date().toISOString()]);
-      return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+      const usersSheet = getSheet(ss, "Users");
+      usersSheet.appendRow([payload.id, payload.name, payload.hourlyWage, "Employee", new Date().toISOString()]);
+      return jsonResponse({ success: true });
     }
 
     if (action === "EDIT_EMPLOYEE") {
-      const usersSheet = ss.getSheetByName("Users");
+      const usersSheet = getSheet(ss, "Users");
       const existingData = usersSheet.getDataRange().getValues();
       const id = String(payload.id);
       for (let i = 1; i < existingData.length; i++) {
-        if (String(existingData[i][0]) === id) {
+        if (matchId(existingData[i][0], id)) {
           usersSheet.getRange(i + 1, 2).setValue(payload.name);
           usersSheet.getRange(i + 1, 3).setValue(payload.hourlyWage);
-          return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+          return jsonResponse({ success: true });
         }
       }
-      return ContentService.createTextOutput(JSON.stringify({ success: false, error: "Employee not found" })).setMimeType(ContentService.MimeType.JSON);
+      return jsonResponse({ success: false, error: "Employee not found" });
     }
 
     if (action === "DELETE_EMPLOYEE") {
-      const usersSheet = ss.getSheetByName("Users");
+      const usersSheet = getSheet(ss, "Users");
       const existingData = usersSheet.getDataRange().getValues();
       const id = String(payload.id);
       for (let i = 1; i < existingData.length; i++) {
-        if (String(existingData[i][0]) === id) {
+        if (matchId(existingData[i][0], id)) {
           usersSheet.deleteRow(i + 1);
-          return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+          return jsonResponse({ success: true });
         }
       }
-      return ContentService.createTextOutput(JSON.stringify({ success: false, error: "Employee not found" })).setMimeType(ContentService.MimeType.JSON);
+      return jsonResponse({ success: false, error: "Employee not found" });
     }
-    
+
+    // 13. INVOICES
     if (action === "SAVE_INVOICE") {
-      const invoicesSheet = ss.getSheetByName("Invoices");
-      if (!invoicesSheet) {
-        return ContentService.createTextOutput(JSON.stringify({ success: false, error: "Invoices sheet not found" })).setMimeType(ContentService.MimeType.JSON);
-      }
+      const invoicesSheet = getSheet(ss, "Invoices");
       const data = invoicesSheet.getDataRange().getValues();
       let updated = false;
       for (let i = 1; i < data.length; i++) {
-        if (String(data[i][0]).trim() === String(payload.id).trim()) {
-          // Update existing row
-          invoicesSheet.getRange(i + 1, 2).setValue(payload.customerName);
-          invoicesSheet.getRange(i + 1, 3).setValue(payload.date);
-          invoicesSheet.getRange(i + 1, 4).setValue(payload.total);
-          invoicesSheet.getRange(i + 1, 5).setValue(JSON.stringify(payload));
+        if (matchId(data[i][0], payload.id)) {
+          invoicesSheet.getRange(i + 1, 2, 1, 4).setValues([[
+            payload.customerName,
+            payload.date,
+            payload.total,
+            JSON.stringify(payload)
+          ]]);
           updated = true;
           break;
         }
       }
       if (!updated) {
-        invoicesSheet.appendRow([
-          payload.id,
-          payload.customerName,
-          payload.date,
-          payload.total,
-          JSON.stringify(payload)
-        ]);
+        invoicesSheet.appendRow([payload.id, payload.customerName, payload.date, payload.total, JSON.stringify(payload)]);
       }
-      
-      // Auto-mark referenced time entries as billed (Col 11)
+
       if (payload.timeEntryIds && payload.timeEntryIds.length > 0) {
-        const timeSheet = ss.getSheetByName("TimeEntries");
-        if (timeSheet) {
-          const existingData = timeSheet.getDataRange().getValues();
-          const idMap = {};
-          payload.timeEntryIds.forEach(function(id) {
-            idMap[id] = true;
-          });
-          for (let i = 1; i < existingData.length; i++) {
-            const rId = existingData[i][0];
-            if (idMap[rId]) {
-              timeSheet.getRange(i + 1, 11).setValue(true);
-            }
+        const timeSheet = getSheet(ss, "TimeEntries");
+        const existingData = timeSheet.getDataRange().getValues();
+        const idMap = {};
+        payload.timeEntryIds.forEach(id => idMap[id] = true);
+        for (let i = 1; i < existingData.length; i++) {
+          if (idMap[existingData[i][0]]) {
+            timeSheet.getRange(i + 1, 11).setValue(true);
           }
         }
       }
-      
-      return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+      return jsonResponse({ success: true });
     }
 
-    if (action === "SET_ENTRIES_BILLED_STATUS") {
-      const timeSheet = ss.getSheetByName("TimeEntries");
-      if (!timeSheet) {
-        return ContentService.createTextOutput(JSON.stringify({ success: false, error: "TimeEntries sheet not found" })).setMimeType(ContentService.MimeType.JSON);
-      }
-      const existingData = timeSheet.getDataRange().getValues();
-      const targetIds = payload.entryIds || [];
-      const statusValue = payload.isBilled;
-      const idMap = {};
-      targetIds.forEach(function(id) {
-        idMap[id] = true;
-      });
-      for (let i = 1; i < existingData.length; i++) {
-        const rId = existingData[i][0];
-        if (idMap[rId]) {
-          timeSheet.getRange(i + 1, 11).setValue(statusValue);
-        }
-      }
-      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Updated billed status" })).setMimeType(ContentService.MimeType.JSON);
-    }
-
+    // 14. JOBS / PROJECTS
     if (action === "ADD_JOB" || action === "ADD_PROJECT") {
-      const projectsSheet = ss.getSheetByName("Projects");
+      const projectsSheet = getSheet(ss, "Projects");
       const existingData = projectsSheet.getDataRange().getValues();
       const existingProjects = existingData.slice(1).map(row => row[0].toString().trim().toLowerCase());
-      const name = payload.name.toString().trim();
-      if (!name) {
-        return ContentService.createTextOutput(JSON.stringify({ success: false, error: "Empty job/project name" })).setMimeType(ContentService.MimeType.JSON);
-      }
+      const name = payload.name ? payload.name.toString().trim() : "";
+      if (!name) return jsonResponse({ success: false, error: "Empty job/project name" });
       if (existingProjects.includes(name.toLowerCase())) {
-        return ContentService.createTextOutput(JSON.stringify({ success: false, error: "Job/Project already exists" })).setMimeType(ContentService.MimeType.JSON);
+        return jsonResponse({ success: false, error: "Job/Project already exists" });
       }
       projectsSheet.appendRow([name, new Date().toISOString()]);
-      return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+      return jsonResponse({ success: true });
     }
 
     if (action === "DELETE_JOB" || action === "DELETE_PROJECT") {
-      const projectsSheet = ss.getSheetByName("Projects");
+      const projectsSheet = getSheet(ss, "Projects");
       const existingData = projectsSheet.getDataRange().getValues();
       const name = payload.name.toString().trim().toLowerCase();
-      let deleted = false;
       for (let i = 1; i < existingData.length; i++) {
         if (existingData[i][0] && existingData[i][0].toString().trim().toLowerCase() === name) {
           projectsSheet.deleteRow(i + 1);
-          deleted = true;
-          break;
+          return jsonResponse({ success: true });
         }
       }
-      return ContentService.createTextOutput(JSON.stringify({ success: deleted })).setMimeType(ContentService.MimeType.JSON);
+      return jsonResponse({ success: false });
     }
 
-    if (action === "ADD_CUSTOMER") {
-      const customersSheet = ss.getSheetByName("Customers");
-      customersSheet.appendRow([
-        payload.id,
-        payload.name,
-        payload.email || "",
-        payload.phone || "",
-        payload.address || "",
-        new Date().toISOString()
-      ]);
-      return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
-    }
-
-    if (action === "DELETE_CUSTOMER") {
-      const customersSheet = ss.getSheetByName("Customers");
-      const existingData = customersSheet.getDataRange().getValues();
-      let deleted = false;
-      for (let i = 1; i < existingData.length; i++) {
-        if (matchId(existingData[i][0], payload.id)) {
-          customersSheet.deleteRow(i + 1);
-          deleted = true;
-          break;
-        }
-      }
-      return ContentService.createTextOutput(JSON.stringify({ success: deleted })).setMimeType(ContentService.MimeType.JSON);
-    }
-
+    // 15. CHAT MESSAGES
     if (action === "SEND_CHAT_MESSAGE") {
-      let chatSheet = ss.getSheetByName("ChatMessages");
-      if (!chatSheet) {
-         chatSheet = ss.insertSheet("ChatMessages");
-         chatSheet.appendRow(["Timestamp", "Sender ID", "Sender Name", "Message Text", "Status", "Message ID", "Photo URL"]);
-         chatSheet.getRange("A1:G1").setFontWeight("bold");
-         chatSheet.setFrozenRows(1);
-      }
+      const chatSheet = getSheet(ss, "ChatMessages");
       chatSheet.appendRow([
         payload.timestamp || new Date().toISOString(),
         payload.senderId || "",
@@ -740,17 +762,11 @@ function doPost(e) {
         payload.messageId || "",
         payload.photoUrl || ""
       ]);
-      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Chat message sent" })).setMimeType(ContentService.MimeType.JSON);
+      return jsonResponse({ success: true });
     }
 
     if (action === "FETCH_CHAT_MESSAGES") {
-      let chatSheet = ss.getSheetByName("ChatMessages");
-      if (!chatSheet) {
-         chatSheet = ss.insertSheet("ChatMessages");
-         chatSheet.appendRow(["Timestamp", "Sender ID", "Sender Name", "Message Text", "Status", "Message ID", "Photo URL"]);
-         chatSheet.getRange("A1:G1").setFontWeight("bold");
-         chatSheet.setFrozenRows(1);
-      }
+      const chatSheet = getSheet(ss, "ChatMessages");
       const cData = chatSheet.getDataRange().getValues();
       let messages = [];
       if (cData.length > 1) {
@@ -764,54 +780,59 @@ function doPost(e) {
           photoUrl: r[6] ? String(r[6]) : undefined
         }));
       }
-      return ContentService.createTextOutput(JSON.stringify({ success: true, data: { messages } })).setMimeType(ContentService.MimeType.JSON);
+      return jsonResponse({ success: true, data: { messages } });
     }
-    
-    return ContentService.createTextOutput(JSON.stringify({ success: false, error: "Action not supported: " + action })).setMimeType(ContentService.MimeType.JSON);
+
+    return jsonResponse({ success: false, error: "Action not supported: " + action });
 
   } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({ success: false, error: error.message })).setMimeType(ContentService.MimeType.JSON);
+    return jsonResponse({ success: false, error: error.message || String(error) });
+  } finally {
+    try {
+      lock.releaseLock();
+    } catch (e) {}
   }
-  
-  return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
 }
 
 function doGet(e) {
   try {
-    setup();
-  } catch (err) {}
-  
-  // Allow fetching current state (Projects, etc)
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const projectsSheet = ss.getSheetByName("Projects");
-  let projects = ["General"];
-  if (projectsSheet) {
+    const ss = getSpreadsheet();
+    const projectsSheet = getSheet(ss, "Projects");
     const pData = projectsSheet.getDataRange().getValues();
-    projects = pData.slice(1).map(r => r[0]).filter(Boolean);
-  }
+    const projects = pData.slice(1).map(r => r[0]).filter(Boolean);
 
-  const companySheet = ss.getSheetByName("CompanyInfo");
-  let companyInfo = null;
-  if (companySheet) {
+    const companySheet = getSheet(ss, "CompanyInfo");
     const cInfoData = companySheet.getDataRange().getValues();
-    companyInfo = {
-        businessName: 'PROCONTRACTOR',
-        tagline: 'PREMIUM TRACKED TIME & FIELD SERVICES INVOICING',
-        contactLine: 'Contact: billing@procontractor.com | Tel: (555) 019-9238',
-        address: ''
+    const companyInfo = {
+      businessName: 'TKO FIELD OPERATIONS',
+      tagline: 'ENTERPRISE FIELD WORKFORCE & TIME OPERATIONS',
+      contactLine: 'Contact: dispatch@tkofieldops.com | Tel: (555) 019-9238',
+      address: ''
     };
     if (cInfoData.length > 1) {
       cInfoData.slice(1).forEach(r => {
-         if (r[0]) {
-           companyInfo[r[0]] = r[1];
-         }
+        if (r[0]) companyInfo[r[0]] = r[1];
       });
     }
+
+    return jsonResponse({ projects: projects, companyInfo: companyInfo });
+  } catch (err) {
+    return jsonResponse({ error: err.message, projects: ["General"] });
   }
-  
-  return ContentService.createTextOutput(JSON.stringify({ projects: projects, companyInfo: companyInfo })).setMimeType(ContentService.MimeType.JSON);
 }
 
 function doOptions(e) {
   return ContentService.createTextOutput("OK").setMimeType(ContentService.MimeType.TEXT);
+}
+
+function jsonResponse(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function safeJsonParse(str, fallback) {
+  try {
+    return JSON.parse(str);
+  } catch (e) {
+    return fallback;
+  }
 }

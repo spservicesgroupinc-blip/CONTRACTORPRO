@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, BellOff, CheckCircle2, Sparkles, Clock, AlertCircle } from 'lucide-react';
+import { Bell, BellOff, CheckCircle2, Sparkles, Clock, AlertCircle, ShieldAlert, Timer } from 'lucide-react';
 import { 
   getNotificationPermissionStatus, 
   requestNotificationPermission, 
   sendTestNotification, 
+  sendPushNotification,
   NotificationPermissionStatus 
 } from '../services/reminderService';
 
@@ -23,7 +24,7 @@ export const ShiftReminderBanner: React.FC = () => {
     setStatus(getNotificationPermissionStatus());
     setIsTesting(false);
     if (granted) {
-      setMsg('Push reminders enabled! You will be alerted Mon–Fri at 8:30 AM & 5:00 PM.');
+      setMsg('Push notifications enabled! Shift reminders (8:30 AM / 5:00 PM) & 8-hour safety alerts are now active.');
     } else {
       setMsg('Notification permission was blocked in browser settings.');
     }
@@ -36,9 +37,23 @@ export const ShiftReminderBanner: React.FC = () => {
     setStatus(getNotificationPermissionStatus());
     setIsTesting(false);
     if (success) {
-      setMsg('Test notification dispatched!');
+      setMsg('Test notification dispatched to your device!');
     } else {
-      setMsg('Failed to send notification. Check browser permissions.');
+      setMsg('Failed to send notification. Please check your browser permissions.');
+    }
+  };
+
+  const handleTestWarning = async () => {
+    setIsTesting(true);
+    setMsg(null);
+    const success = await sendPushNotification(
+      '⚠️ 8-Hour Shift Warning (Test)',
+      'You have been clocked in for 8 hours on [General]. Automatic clock-out will occur at 9 hours without user input.',
+      'test-8h-warning'
+    );
+    setIsTesting(false);
+    if (success) {
+      setMsg('Test 8-Hour warning notification sent!');
     }
   };
 
@@ -48,9 +63,9 @@ export const ShiftReminderBanner: React.FC = () => {
 
   return (
     <div className="w-full max-w-md mx-auto px-4 my-3">
-      <div className="bg-gradient-to-br from-slate-900 to-blue-950 text-white rounded-2xl p-4 shadow-md border border-blue-800/40 relative overflow-hidden">
+      <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-blue-950 text-white rounded-2xl p-4 shadow-md border border-blue-800/40 relative overflow-hidden">
         {/* Background glow accent */}
-        <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-blue-500/10 rounded-full blur-xl pointer-events-none" />
+        <div className="absolute -right-6 -bottom-6 w-28 h-28 bg-blue-500/10 rounded-full blur-xl pointer-events-none" />
 
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2.5">
@@ -59,7 +74,7 @@ export const ShiftReminderBanner: React.FC = () => {
             </div>
             <div>
               <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
-                Workday Shift Reminders
+                TKO Shift Reminders & Safety
                 <span className="text-[9px] font-extrabold uppercase bg-blue-500/30 text-blue-300 px-1.5 py-0.5 rounded border border-blue-400/30">
                   Mon – Fri
                 </span>
@@ -69,6 +84,27 @@ export const ShiftReminderBanner: React.FC = () => {
               </p>
             </div>
           </div>
+        </div>
+
+        {/* 8h Warning & 9h Auto Clock-out Safety Badge */}
+        <div className="mt-2.5 bg-slate-800/80 border border-slate-700/80 rounded-xl p-2.5 flex items-center justify-between text-[11px]">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
+            <div>
+              <div className="font-bold text-slate-200">8h Warning / 9h Auto Clock-Out</div>
+              <div className="text-[10px] text-slate-400 leading-tight">Automated overtime alert & hard shift close at 9h</div>
+            </div>
+          </div>
+          {status === 'granted' && (
+            <button
+              type="button"
+              onClick={handleTestWarning}
+              disabled={isTesting}
+              className="text-[10px] bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold px-2 py-1 rounded border border-amber-500/30 transition cursor-pointer shrink-0"
+            >
+              Test 8h Alert
+            </button>
+          )}
         </div>
 
         {msg && (
@@ -82,7 +118,7 @@ export const ShiftReminderBanner: React.FC = () => {
           {status === 'granted' ? (
             <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-bold">
               <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Reminders Active</span>
+              <span>Reminders & Protection Active</span>
             </div>
           ) : status === 'denied' ? (
             <div className="flex items-center gap-1.5 text-amber-400 text-[11px] font-bold">
@@ -113,7 +149,7 @@ export const ShiftReminderBanner: React.FC = () => {
                 disabled={isTesting}
                 className="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 hover:text-white text-[11px] font-bold px-2.5 py-1 rounded-lg border border-slate-700 transition-all cursor-pointer"
               >
-                Test Notification
+                Test Push
               </button>
             )}
           </div>

@@ -1,9 +1,13 @@
 /**
- * Reminder Service for Shift Notifications
- * Handles Monday - Friday shift reminders:
- * - 8:30 AM: Remind user to Clock In if not already clocked in.
- * - 5:00 PM: Remind user to Clock Out if currently clocked in.
+ * TKO Field Operations - Shift & Safety Notification Service
+ * Handles:
+ * - 8:30 AM: Remind user to Clock In if not clocked in (Monday - Friday).
+ * - 5:00 PM: Remind user to Clock Out if currently clocked in (Monday - Friday).
+ * - 8-Hour Warning: High priority push notification warning at 8 hours of active shift.
+ * - 9-Hour Auto Clock-Out: Automatic system clock-out at 9 hours without user input.
  */
+
+import { TimeEntry } from '../types';
 
 export type NotificationPermissionStatus = 'granted' | 'denied' | 'default' | 'unsupported';
 
@@ -35,7 +39,12 @@ export const requestNotificationPermission = async (): Promise<boolean> => {
   return false;
 };
 
-export const sendPushNotification = async (title: string, body: string, tag: string = 'shift-reminder'): Promise<boolean> => {
+export const sendPushNotification = async (
+  title: string,
+  body: string,
+  tag: string = 'shift-reminder',
+  requireInteraction: boolean = true
+): Promise<boolean> => {
   if (typeof window === 'undefined' || !('Notification' in window)) {
     return false;
   }
@@ -54,9 +63,9 @@ export const sendPushNotification = async (title: string, body: string, tag: str
           icon: '/pwa-icon.svg',
           badge: '/pwa-icon.svg',
           tag,
-          vibrate: [200, 100, 200, 100, 200],
+          vibrate: [300, 150, 300, 150, 300],
           data: { url: '/', time: Date.now() },
-          requireInteraction: true,
+          requireInteraction: requireInteraction,
         });
         return true;
       }
@@ -67,6 +76,7 @@ export const sendPushNotification = async (title: string, body: string, tag: str
       body,
       icon: '/pwa-icon.svg',
       tag,
+      requireInteraction: requireInteraction,
     });
     notif.onclick = () => {
       window.focus();
@@ -82,24 +92,18 @@ export const sendPushNotification = async (title: string, body: string, tag: str
 export const sendTestNotification = async (): Promise<boolean> => {
   const granted = await requestNotificationPermission();
   if (!granted && Notification.permission !== 'granted') {
-    alert('Please enable notifications in your browser settings to receive shift reminders.');
+    alert('Please enable notifications in your browser settings to receive shift reminders and safety warnings.');
     return false;
   }
   return sendPushNotification(
-    '🔔 Shift Reminders Active!',
-    'You will receive automatic alerts at 8:30 AM to Clock In and 5:00 PM to Clock Out (Mon–Fri).',
+    '🔔 TKO Field Operations Reminders Active',
+    'Automatic push alerts are configured for 8:30 AM Clock-In, 5:00 PM Clock-Out (Mon–Fri), and 8-Hour Overtime Safety Warning.',
     'test-reminder'
   );
 };
 
 /**
- * Checks current time and sends shift reminders if needed.
- * Should be called periodically (e.g. every 30-60 seconds) and on visibility change.
- *
- * Rules:
- * - Days: Monday through Friday (getDay() 1 to 5)
- * - 8:30 AM (510 min from midnight): If !isClockedIn -> Remind to Clock In
- * - 5:00 PM (1020 min from midnight): If isClockedIn -> Remind to Clock Out
+ * Checks scheduled time and sends daily shift reminders if needed (Mon - Fri).
  */
 export const checkAndSendShiftReminders = (isClockedIn: boolean): void => {
   if (typeof window === 'undefined' || !('Notification' in window) || Notification.permission !== 'granted') {
@@ -127,11 +131,11 @@ export const checkAndSendShiftReminders = (isClockedIn: boolean): void => {
 
   if (currentMinutes >= CLOCKIN_MINUTES && currentMinutes < CLOCKIN_WINDOW_END) {
     if (!isClockedIn) {
-      const key = `geotime_reminder_clockin_${todayStr}`;
+      const key = `tko_reminder_clockin_${todayStr}`;
       if (localStorage.getItem(key) !== 'sent') {
         sendPushNotification(
-          '⏰ Time to Clock In!',
-          'Good morning! You haven\'t clocked in yet. Tap to open your timesheet and start your shift.',
+          '⏰ Reminder: Time to Clock In',
+          'Good morning! You haven\'t clocked in for today\'s shift. Tap to start your shift timer.',
           `clock-in-${todayStr}`
         ).then(success => {
           if (success) {
@@ -148,11 +152,11 @@ export const checkAndSendShiftReminders = (isClockedIn: boolean): void => {
 
   if (currentMinutes >= CLOCKOUT_MINUTES) {
     if (isClockedIn) {
-      const key = `geotime_reminder_clockout_${todayStr}`;
+      const key = `tko_reminder_clockout_${todayStr}`;
       if (localStorage.getItem(key) !== 'sent') {
         sendPushNotification(
-          '⏰ Time to Clock Out!',
-          'It\'s 5:00 PM! You are still clocked in. Tap to review your shift and clock out.',
+          '⏰ End of Day: Time to Clock Out',
+          'It\'s 5:00 PM! You are currently still clocked in. Tap to review your entries and clock out.',
           `clock-out-${todayStr}`
         ).then(success => {
           if (success) {
@@ -160,6 +164,65 @@ export const checkAndSendShiftReminders = (isClockedIn: boolean): void => {
           }
         });
       }
+    }
+  }
+};
+
+/**
+ * 8-Hour Overtime / Shift Warning & 9-Hour Automatic Clock-Out System
+ * - Triggers a high-priority push notification at 8 hours of active shift.
+ * - Automatically closes shift and triggers clock-out at 9 hours without user input.
+ */
+export const check8HourWarningAndAutoClockOut = (
+  activeEntry: TimeEntry | null | undefined,
+  onAutoClockOut: (entry: TimeEntry) => void
+): void => {
+  if (!activeEntry || !activeEntry.clockIn || activeEntry.clockOut || activeEntry.isExpense) {
+    return;
+  }
+
+  const inTime = new Date(activeEntry.clockIn).getTime();
+  if (isNaN(inTime)) return;
+
+  const now = Date.now();
+  const elapsedMs = now - inTime;
+  const elapsedHours = elapsedMs / (1000 * 60 * 60);
+
+  const entryIdKey = activeEntry.id || activeEntry.clockIn;
+
+  // 1. Check for 8-Hour Warning (Between 8.0h and 9.0h)
+  if (elapsedHours >= 8.0 && elapsedHours < 9.0) {
+    const warningKey = `tko_warning_8h_${entryIdKey}`;
+    if (localStorage.getItem(warningKey) !== 'sent') {
+      sendPushNotification(
+        '⚠️ 8-Hour Shift Warning',
+        `You have been clocked in for 8 hours on [${activeEntry.projectName || 'General'}]. Automatic clock-out will occur at 9 hours without user input.`,
+        `warning-8h-${entryIdKey}`,
+        true
+      ).then(success => {
+        if (success) {
+          localStorage.setItem(warningKey, 'sent');
+        }
+      });
+    }
+  }
+
+  // 2. Check for 9-Hour Automatic Clock-Out (>= 9.0 hours)
+  if (elapsedHours >= 9.0) {
+    const autoOutKey = `tko_autoclockout_9h_${entryIdKey}`;
+    if (localStorage.getItem(autoOutKey) !== 'done') {
+      localStorage.setItem(autoOutKey, 'done');
+
+      // Send immediate notification
+      sendPushNotification(
+        '🛑 9-Hour Auto Clock-Out Triggered',
+        `Your shift has exceeded the 9-hour limit on [${activeEntry.projectName || 'General'}] and has been automatically clocked out.`,
+        `autoclockout-9h-${entryIdKey}`,
+        true
+      );
+
+      // Trigger automatic clock-out logic
+      onAutoClockOut(activeEntry);
     }
   }
 };

@@ -1,6 +1,6 @@
 {
-  "name": "PROCONTRACTOR",
-  "description": "A GPS-stamped time tracking app for construction employees to clock in/out, track hours, and generate pay reports.",
+  "name": "TKO Field Operations",
+  "description": "TKO Field Operations - GPS-stamped time tracking, job management, payroll reporting, and field workforce management.",
   "requestFramePermissions": [
     "geolocation",
     "microphone"

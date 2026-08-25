@@ -1,11 +1,11 @@
 {
-  "name": "ProContractor",
-  "short_name": "ProContractor",
-  "description": "GPS-stamped time tracking for construction teams, complete with invoicing and payroll reporting.",
+  "name": "TKO Field Operations",
+  "short_name": "TKO Field",
+  "description": "TKO Field Operations - GPS-stamped time tracking, job management, and payroll reporting.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#101726",
-  "theme_color": "#f97316",
+  "background_color": "#090d16",
+  "theme_color": "#0f172a",
   "orientation": "portrait-primary",
   "categories": ["business", "productivity", "utilities"],
   "icons": [

@@ -10,7 +10,7 @@ import Messaging from './components/Messaging';
 import BottomNav from './components/BottomNav';
 import Sidebar from './components/Sidebar';
 import ShiftReminderBanner from './components/ShiftReminderBanner';
-import { checkAndSendShiftReminders } from './services/reminderService';
+import { checkAndSendShiftReminders, check8HourWarningAndAutoClockOut } from './services/reminderService';
 import { chatService } from './services/chatService';
 import { Clock, FileText, DollarSign, LayoutGrid, User, CalendarDays, Square, Trash2, Plus, CheckCircle2, Wallet, LogOut, ShieldAlert, MessageSquare, Mic, MicOff, Sparkles, Loader2, Briefcase, Tag, AlertCircle, X, Check, StopCircle, ChevronRight, Camera, Search, Download, Edit3, Filter } from 'lucide-react';
 import { getDirectImageUrl } from './photoUtils';
@@ -605,15 +605,41 @@ const App: React.FC = () => {
                 if (data && data.success && data.data) {
                     if (Array.isArray(data.data.entries)) {
                         const remoteEntries: TimeEntry[] = data.data.entries;
+                        const nowMs = Date.now();
+
                         setTimeEntries(prev => {
                             const map = new Map<string, TimeEntry>();
-                            remoteEntries.forEach(e => map.set(e.id, e));
+                            // Populate from remote (server is authoritative for closed shifts)
+                            remoteEntries.forEach(e => {
+                                // Auto clock-out any dangling open shifts older than 9 hours
+                                if (!e.clockOut && !e.isExpense && e.clockIn) {
+                                    const shiftDurationHours = (nowMs - new Date(e.clockIn).getTime()) / (1000 * 60 * 60);
+                                    if (shiftDurationHours >= 9) {
+                                        const autoOutTime = new Date(new Date(e.clockIn).getTime() + 9 * 3600 * 1000).toISOString();
+                                        const autoNote = (e.notes ? e.notes + '\n' : '') + '[Auto Clock-Out: 9h limit reached]';
+                                        e = { ...e, clockOut: autoOutTime, notes: autoNote };
+                                    }
+                                }
+                                map.set(e.id, e);
+                            });
+
+                            // Preserve any brand new local unsynced entries that haven't hit server yet
                             prev.forEach(e => {
                                 const existing = map.get(e.id);
-                                if (!existing || (!e.clockOut && !e.isExpense)) {
+                                if (!existing) {
+                                    // Check if stale active local entry exceeds 9 hours
+                                    if (!e.clockOut && !e.isExpense && e.clockIn) {
+                                        const shiftDurationHours = (nowMs - new Date(e.clockIn).getTime()) / (1000 * 60 * 60);
+                                        if (shiftDurationHours >= 9) {
+                                            const autoOutTime = new Date(new Date(e.clockIn).getTime() + 9 * 3600 * 1000).toISOString();
+                                            const autoNote = (e.notes ? e.notes + '\n' : '') + '[Auto Clock-Out: 9h limit reached]';
+                                            e = { ...e, clockOut: autoOutTime, notes: autoNote };
+                                        }
+                                    }
                                     map.set(e.id, e);
                                 }
                             });
+
                             return Array.from(map.values()).sort((a, b) => 
                                 new Date(a.clockIn).getTime() - new Date(b.clockIn).getTime()
                             );
@@ -723,20 +749,63 @@ const App: React.FC = () => {
 
     const isClockedIn = !!activeEntry;
 
-    // Automated 8:30 AM (Clock In) and 5:00 PM (Clock Out) Monday-Friday Push Notification Reminders
+    // Automatic Clock-Out Handler at 9-Hour Limit
+    const handleAutoClockOut = (active: TimeEntry) => {
+        if (!active || active.clockOut) return;
+
+        const inTime = new Date(active.clockIn).getTime();
+        const autoOutTime = new Date(inTime + 9 * 3600 * 1000).toISOString();
+        const autoNote = (active.notes ? active.notes + '\n' : '') + '[Auto Clock-Out: 9h limit reached]';
+
+        const updatedEntry: TimeEntry = {
+            ...active,
+            clockOut: autoOutTime,
+            notes: autoNote
+        };
+
+        // Update local state immediately
+        setTimeEntries(prev => prev.map(e => e.id === active.id ? updatedEntry : e));
+
+        // Immediately notify backend via atomic clock-out endpoint
+        if (profile) {
+            fetch('/api/clock-out', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: active.id,
+                    entryId: active.id,
+                    profileId: profile.id,
+                    clockOut: autoOutTime,
+                    autoClockOut: true,
+                    notes: autoNote
+                })
+            }).catch(e => console.error('Auto clock-out API error:', e));
+        }
+    };
+
+    // Automated 8:30 AM (Clock In) / 5:00 PM (Clock Out) Reminders, 8-Hour Warning & 9-Hour Auto Clock-Out
     useEffect(() => {
         // Initial evaluation
         checkAndSendShiftReminders(isClockedIn);
+        if (activeEntry) {
+            check8HourWarningAndAutoClockOut(activeEntry, handleAutoClockOut);
+        }
 
-        // Check every 30 seconds for 8:30 AM or 5:00 PM reminder times
+        // Check every 30 seconds
         const reminderInterval = setInterval(() => {
             checkAndSendShiftReminders(isClockedIn);
+            if (activeEntry) {
+                check8HourWarningAndAutoClockOut(activeEntry, handleAutoClockOut);
+            }
         }, 30000);
 
-        // Also check on tab visibility change (e.g. unlocking phone or bringing app to foreground)
+        // Also check on tab visibility change (e.g. unlocking phone or switching back to app)
         const handleVisibilityChange = () => {
             if (document.visibilityState === 'visible') {
                 checkAndSendShiftReminders(isClockedIn);
+                if (activeEntry) {
+                    check8HourWarningAndAutoClockOut(activeEntry, handleAutoClockOut);
+                }
             }
         };
         document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -745,7 +814,7 @@ const App: React.FC = () => {
             clearInterval(reminderInterval);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
-    }, [isClockedIn]);
+    }, [isClockedIn, activeEntry, profile]);
 
     const isOnBreak = !!breakStartTime;
 
@@ -911,29 +980,69 @@ const App: React.FC = () => {
                 const combinedNotes = noteText 
                     ? (active.notes ? `${active.notes}\n${noteText}` : noteText) 
                     : active.notes;
+                const clockOutTime = new Date().toISOString();
                 const updatedEntry: TimeEntry = {
                     ...active,
-                    clockOut: new Date().toISOString(),
+                    clockOut: clockOutTime,
                     clockOutLocation: location || active.clockOutLocation,
                     notes: combinedNotes
                 };
+
+                // Update local state first for instant responsiveness
                 setTimeEntries(prev => prev.map(e => e.id === active.id ? updatedEntry : e));
                 setClockNote('');
+
+                // Trigger direct atomic clock-out call
+                if (profile) {
+                    fetch('/api/clock-out', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            id: active.id,
+                            entryId: active.id,
+                            profileId: profile.id,
+                            clockOut: clockOutTime,
+                            clockOutLocation: location || active.clockOutLocation,
+                            notes: combinedNotes
+                        })
+                    }).catch(err => console.error('Atomic clock-out API error:', err));
+                }
             } else {
                 // Clocking in
                 if (isOnBreak) {
                     setBreakStartTime(null);
                     setBreakProject(null);
                 }
+                const clockInTime = new Date().toISOString();
+                const newEntryId = new Date().toISOString();
                 const newEntry: TimeEntry = {
-                    id: new Date().toISOString(),
+                    id: newEntryId,
                     projectName: selectedProject || 'General',
-                    clockIn: new Date().toISOString(),
+                    clockIn: clockInTime,
                     clockInLocation: location,
                     notes: clockNote.trim() || undefined
                 };
+
+                // Update local state first for instant responsiveness
                 setTimeEntries(prev => [...prev, newEntry]);
                 setClockNote('');
+
+                // Trigger direct atomic clock-in call
+                if (profile) {
+                    fetch('/api/clock-in', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            id: newEntryId,
+                            entryId: newEntryId,
+                            profileId: profile.id,
+                            projectName: selectedProject || 'General',
+                            clockIn: clockInTime,
+                            clockInLocation: location,
+                            notes: clockNote.trim() || undefined
+                        })
+                    }).catch(err => console.error('Atomic clock-in API error:', err));
+                }
             }
         } catch (err: any) {
             console.error('Clock toggle error:', err);
@@ -1045,24 +1154,30 @@ const App: React.FC = () => {
             <div className="w-full md:ml-64 max-w-5xl lg:max-w-7xl mx-auto relative flex flex-col h-full overflow-hidden">
                 
                 {/* Global Header */}
-                <header className="bg-blue-950 text-white px-5 py-4 flex items-center justify-between shrink-0 z-20">
+                <header className="bg-blue-950 text-white px-5 py-3 flex items-center justify-between shrink-0 z-20 shadow-sm border-b border-blue-900/60">
                     <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-[#2563eb] flex items-center justify-center font-bold text-sm text-white">
-                            {profile.name ? profile.name.charAt(0).toUpperCase() : 'U'}
+                        <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-700/80 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
+                            <img src="/pwa-icon.svg" alt="TKO" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                         </div>
-                        <span className="font-semibold text-[15px]">{profile.name}</span>
+                        <div>
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-black text-orange-400">TKO</span>
+                                <span className="font-bold text-[14px] text-white">{profile.name}</span>
+                            </div>
+                            <span className="text-slate-400 text-[10px] font-semibold tracking-wider block">Field Operator</span>
+                        </div>
                     </div>
-                    <span className="text-gray-400 text-[11px] font-bold tracking-widest">USER</span>
+                    <span className="text-blue-300/80 bg-blue-900/60 border border-blue-800/80 px-2 py-0.5 rounded text-[10px] font-extrabold tracking-wider uppercase">ACTIVE</span>
                 </header>
 
                 {/* PWA Mobile App Download Assistance Banner */}
                 {!isStandalone && showInstallBanner && (
-                    <div className="bg-gradient-to-r from-amber-600 to-blue-600 text-white px-4 py-2.5 shrink-0 flex items-center justify-between z-20 text-[11px] font-bold shadow-md transition-all">
+                    <div className="bg-gradient-to-r from-orange-600 via-amber-600 to-blue-700 text-white px-4 py-2.5 shrink-0 flex items-center justify-between z-20 text-[11px] font-bold shadow-md transition-all">
                         <div className="flex items-center gap-1.5 leading-tight">
                             <span className="text-sm">📱</span>
                             <span>
                                 {isInstallable ? (
-                                    "Save ProContractor to your home screen for quick offline access!"
+                                    "Save TKO Field Operations to your home screen for quick offline access!"
                                 ) : (
                                     /iPad|iPhone|iPod/.test(navigator.userAgent) ? (
                                         "iOS user? Tap the Share button & choose 'Add to Home Screen'!"

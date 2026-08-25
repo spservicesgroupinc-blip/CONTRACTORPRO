@@ -116,7 +116,7 @@ self.addEventListener('notificationclick', (event) => {
 
 // Incoming Push Notifications
 self.addEventListener('push', (event) => {
-  let data = { title: '⏰ ProContractor Shift Reminder', body: 'Please check your shift status.' };
+  let data = { title: '⏰ TKO Field Operations Shift Reminder', body: 'Please check your shift status.' };
   if (event.data) {
     try {
       data = event.data.json();
@@ -126,7 +126,7 @@ self.addEventListener('push', (event) => {
   }
 
   event.waitUntil(
-    self.registration.showNotification(data.title || '⏰ ProContractor Reminder', {
+    self.registration.showNotification(data.title || '⏰ TKO Shift Reminder', {
       body: data.body,
       icon: '/pwa-icon.svg',
       badge: '/pwa-icon.svg',
