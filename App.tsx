@@ -1157,14 +1157,14 @@ const App: React.FC = () => {
                 <header className="bg-blue-950 text-white px-5 py-3 flex items-center justify-between shrink-0 z-20 shadow-sm border-b border-blue-900/60">
                     <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-700/80 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
-                            <img src="/pwa-icon.svg" alt="TKO" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            <img src="/pwa-icon.svg" alt="KS Enterprise" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                         </div>
                         <div>
                             <div className="flex items-center gap-1.5">
-                                <span className="text-xs font-black text-orange-400">TKO</span>
+                                <span className="text-xs font-black text-orange-400">KS</span>
                                 <span className="font-bold text-[14px] text-white">{profile.name}</span>
                             </div>
-                            <span className="text-slate-400 text-[10px] font-semibold tracking-wider block">Field Operator</span>
+                            <span className="text-slate-400 text-[10px] font-semibold tracking-wider block">KS Enterprise Group</span>
                         </div>
                     </div>
                     <span className="text-blue-300/80 bg-blue-900/60 border border-blue-800/80 px-2 py-0.5 rounded text-[10px] font-extrabold tracking-wider uppercase">ACTIVE</span>
@@ -1177,7 +1177,7 @@ const App: React.FC = () => {
                             <span className="text-sm">📱</span>
                             <span>
                                 {isInstallable ? (
-                                    "Save TKO Field Operations to your home screen for quick offline access!"
+                                    "Save KS Enterprise Group to your home screen for quick offline access!"
                                 ) : (
                                     /iPad|iPhone|iPod/.test(navigator.userAgent) ? (
                                         "iOS user? Tap the Share button & choose 'Add to Home Screen'!"

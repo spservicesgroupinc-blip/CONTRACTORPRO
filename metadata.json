@@ -1,6 +1,6 @@
 {
-  "name": "TKO Field Operations",
-  "description": "TKO Field Operations - GPS-stamped time tracking, job management, payroll reporting, and field workforce management.",
+  "name": "KS Enterprise Group",
+  "description": "KS Enterprise Group - Building Dreams - GPS-stamped time tracking, job management, payroll reporting, and field workforce management.",
   "requestFramePermissions": [
     "geolocation",
     "microphone"

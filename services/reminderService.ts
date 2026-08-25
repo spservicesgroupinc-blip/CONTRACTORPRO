@@ -1,5 +1,5 @@
 /**
- * TKO Field Operations - Shift & Safety Notification Service
+ * KS Enterprise Group - Building Dreams - Shift & Safety Notification Service
  * Handles:
  * - 8:30 AM: Remind user to Clock In if not clocked in (Monday - Friday).
  * - 5:00 PM: Remind user to Clock Out if currently clocked in (Monday - Friday).

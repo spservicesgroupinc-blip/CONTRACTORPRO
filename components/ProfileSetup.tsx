@@ -53,14 +53,14 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onProfileSave, onAdminAcces
       <div className="w-full max-w-md p-8 bg-white/95 backdrop-blur-xl rounded-[28px] shadow-2xl border border-white/20 flex flex-col gap-6">
         <div className="text-center">
           <div className="w-18 h-18 bg-gradient-to-tr from-slate-900 via-blue-950 to-slate-900 text-white rounded-2xl flex items-center justify-center mx-auto mb-4 font-black text-2xl shadow-xl shadow-slate-900/30 ring-4 ring-orange-100 border border-slate-700/60 relative overflow-hidden">
-            <img src="/pwa-icon.svg" alt="TKO Logo" className="w-full h-full object-cover rounded-2xl" referrerPolicy="no-referrer" />
+            <img src="/pwa-icon.svg" alt="KS Enterprise Group" className="w-full h-full object-cover rounded-2xl" referrerPolicy="no-referrer" />
           </div>
           <h2 className="text-2xl font-black text-gray-900 tracking-tight flex items-center justify-center gap-1.5">
-            <span>TKO</span>
-            <span className="text-orange-600 font-extrabold">Field Operations</span>
+            <span>KS</span>
+            <span className="text-orange-600 font-extrabold">Enterprise Group</span>
           </h2>
-          <p className="mt-1 text-xs font-bold text-slate-500 uppercase tracking-widest">
-            Workforce Portal Login
+          <p className="mt-1 text-xs font-black text-slate-500 uppercase tracking-widest">
+            Building Dreams • Workforce Login
           </p>
           <p className="mt-2 text-sm text-gray-500 font-medium">
             Enter your full name as registered in the company sheet.

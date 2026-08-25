@@ -18,9 +18,9 @@ const getCompanyInfo = (): CompanyInfo => {
     } catch {}
     // Default fallback
     return {
-        businessName: 'PROCONTRACTOR',
-        tagline: 'PREMIUM TRACKED TIME & FIELD SERVICES INVOICING',
-        contactLine: 'Contact: billing@procontractor.com | Tel: (555) 019-9238',
+        businessName: 'KS ENTERPRISE GROUP',
+        tagline: 'BUILDING DREAMS • FIELD SERVICES & INVOICING',
+        contactLine: 'Contact: office@ksenterprisegroup.com | Tel: (555) 019-9238',
         address: ''
     };
 };

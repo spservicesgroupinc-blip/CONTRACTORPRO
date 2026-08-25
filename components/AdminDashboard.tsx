@@ -80,9 +80,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
 
     // Company Info State
     const [companyInfo, setCompanyInfo] = useState({
-        businessName: 'PROCONTRACTOR',
-        tagline: 'PREMIUM TRACKED TIME & FIELD SERVICES INVOICING',
-        contactLine: 'Contact: billing@procontractor.com | Tel: (555) 019-9238',
+        businessName: 'KS ENTERPRISE GROUP',
+        tagline: 'BUILDING DREAMS • FIELD & PROJECT MANAGEMENT',
+        contactLine: 'Contact: office@ksenterprisegroup.com | Tel: (555) 019-9238',
         address: ''
     });
 
@@ -728,14 +728,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                 <div className="max-w-7xl w-full mx-auto flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center overflow-hidden shadow-sm shrink-0">
-                            <img src="/pwa-icon.svg" alt="TKO" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            <img src="/pwa-icon.svg" alt="KS Enterprise" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                         </div>
                         <div>
                             <h1 className="text-sm font-bold tracking-tight flex items-center gap-1.5">
-                                <span className="text-orange-400 font-extrabold">TKO</span>
-                                <span>Admin Portal</span>
+                                <span className="text-orange-400 font-extrabold">KS</span>
+                                <span>Enterprise Admin</span>
                             </h1>
-                            <p className="text-[10px] font-bold text-slate-300 uppercase tracking-wider">TKO Operations Executive</p>
+                            <p className="text-[10px] font-bold text-slate-300 uppercase tracking-wider">Building Dreams • Executive Console</p>
                         </div>
                     </div>
 

@@ -1,5 +1,5 @@
 /**
- * TKO Field Operations - Google Apps Script Backend (High Performance & Resilient)
+ * KS Enterprise Group - Google Apps Script Backend (High Performance & Resilient)
  * 
  * Instructions:
  * Option A (Recommended - Container-Bound):
@@ -10,16 +10,16 @@
  * 5. Click "Deploy" (top right) -> "New deployment".
  * 6. Click the Gear icon beside "Select type" and choose "Web app".
  * 7. Set:
- *    - Description: "TKO Field Operations API"
+ *    - Description: "KS Enterprise Group API"
  *    - Execute as: "Me" (your account)
  *    - Who has access: "Anyone"
- * 8. Click "Deploy", authorize access, and copy the Web App URL.
+ *    - Click "Deploy", authorize access, and copy the Web App URL.
  * 9. Paste this URL into your environment variable: GOOGLE_APPS_SCRIPT_URL
  * 
  * Option B (Standalone Script at script.google.com):
  * - If you created this script directly in Google Apps Script (not from a Sheet),
  *   paste your Google Sheet ID into the SPREADSHEET_ID variable below (or leave blank
- *   to auto-create "TKO Field Operations Database" in your Drive).
+ *   to auto-create "KS Enterprise Group Database" in your Drive).
  */
 
 // OPTIONAL: If running as a standalone script, paste your Spreadsheet ID here.
@@ -78,7 +78,7 @@ function getSpreadsheet() {
 
   // 5. Standalone script fallback: Auto-create database spreadsheet in Drive
   try {
-    var newSs = SpreadsheetApp.create("TKO Field Operations Database");
+    var newSs = SpreadsheetApp.create("KS Enterprise Group Database");
     try {
       PropertiesService.getScriptProperties().setProperty("SPREADSHEET_ID", newSs.getId());
     } catch (err) {}
@@ -136,9 +136,9 @@ function initializeSheetHeaders(sheet, name) {
     sheet.appendRow(["Key", "Value"]);
     sheet.getRange("A1:B1").setFontWeight("bold");
     sheet.setFrozenRows(1);
-    sheet.appendRow(["businessName", "TKO FIELD OPERATIONS"]);
-    sheet.appendRow(["tagline", "ENTERPRISE FIELD WORKFORCE & TIME OPERATIONS"]);
-    sheet.appendRow(["contactLine", "Contact: dispatch@tkofieldops.com | Tel: (555) 019-9238"]);
+    sheet.appendRow(["businessName", "KS ENTERPRISE GROUP"]);
+    sheet.appendRow(["tagline", "BUILDING DREAMS • FIELD WORKFORCE & TIME OPERATIONS"]);
+    sheet.appendRow(["contactLine", "Contact: office@ksenterprisegroup.com | Tel: (555) 019-9238"]);
     sheet.appendRow(["address", ""]);
   } else if (name === "Customers") {
     sheet.appendRow(["ID", "Name", "Email", "Phone", "Address", "Created At"]);
@@ -537,9 +537,9 @@ function doPost(e) {
       }
 
       let companyInfo = {
-        businessName: 'TKO FIELD OPERATIONS',
-        tagline: 'ENTERPRISE FIELD WORKFORCE & TIME OPERATIONS',
-        contactLine: 'Contact: dispatch@tkofieldops.com | Tel: (555) 019-9238',
+        businessName: 'KS ENTERPRISE GROUP',
+        tagline: 'BUILDING DREAMS • FIELD WORKFORCE & TIME OPERATIONS',
+        contactLine: 'Contact: office@ksenterprisegroup.com | Tel: (555) 019-9238',
         address: ''
       };
       if (cInfoData.length > 1) {
@@ -564,11 +564,11 @@ function doPost(e) {
       
       const blob = Utilities.newBlob(Utilities.base64Decode(base64Data.split(',')[1] || base64Data), mimeType, filename);
       let folder;
-      const folders = DriveApp.getFoldersByName("TKO Field Operations Photos");
+      const folders = DriveApp.getFoldersByName("KS Enterprise Group Photos");
       if (folders.hasNext()) {
         folder = folders.next();
       } else {
-        folder = DriveApp.createFolder("TKO Field Operations Photos");
+        folder = DriveApp.createFolder("KS Enterprise Group Photos");
         folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
       }
       
@@ -804,9 +804,9 @@ function doGet(e) {
     const companySheet = getSheet(ss, "CompanyInfo");
     const cInfoData = companySheet.getDataRange().getValues();
     const companyInfo = {
-      businessName: 'TKO FIELD OPERATIONS',
-      tagline: 'ENTERPRISE FIELD WORKFORCE & TIME OPERATIONS',
-      contactLine: 'Contact: dispatch@tkofieldops.com | Tel: (555) 019-9238',
+      businessName: 'KS ENTERPRISE GROUP',
+      tagline: 'BUILDING DREAMS • FIELD WORKFORCE & TIME OPERATIONS',
+      contactLine: 'Contact: office@ksenterprisegroup.com | Tel: (555) 019-9238',
       address: ''
     };
     if (cInfoData.length > 1) {
