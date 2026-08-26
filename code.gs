@@ -152,6 +152,10 @@ function initializeSheetHeaders(sheet, name) {
     sheet.appendRow(["Schedule ID", "Title", "Project Name", "Start Date", "End Date", "Start Time", "End Time", "Assigned To IDs", "Assigned Names", "Location", "Notes", "Status", "Priority", "Color", "Created At", "Payload JSON"]);
     sheet.getRange("A1:P1").setFontWeight("bold");
     sheet.setFrozenRows(1);
+  } else if (name === "Tasks") {
+    sheet.appendRow(["Task ID", "Profile ID", "Title", "Completed", "Priority", "Category", "Photos", "Created At", "Payload JSON"]);
+    sheet.getRange("A1:I1").setFontWeight("bold");
+    sheet.setFrozenRows(1);
   }
 }
 
@@ -384,7 +388,7 @@ function doPost(e) {
       return jsonResponse({ success: false, error: "Entry not found" });
     }
 
-    // 5. HIGH-SPEED SYNC ENTRIES
+    // 5. HIGH-SPEED SYNC ENTRIES (Non-destructive UPSERT Engine)
     if (action === "SYNC_ENTRIES") {
       const timeSheet = getSheet(ss, "TimeEntries");
       const existingData = timeSheet.getDataRange().getValues();
@@ -393,65 +397,60 @@ function doPost(e) {
       
       const newEntriesMap = {};
       newEntries.forEach(function(e) {
-        newEntriesMap[e.id] = e;
+        if (e && e.id) {
+          newEntriesMap[String(e.id)] = e;
+        }
       });
 
-      const existingIdsInPayload = {};
+      const updatedIdsInSheet = {};
 
-      // Loop backwards through existing rows
-      for (let i = existingData.length - 1; i >= 1; i--) {
-        const rowId = existingData[i][0];
-        const rowProfileId = existingData[i][1];
-        
-        if (matchId(rowProfileId, profileId)) {
-          if (!newEntriesMap[rowId]) {
-            // Delete locally deleted entry
-            timeSheet.deleteRow(i + 1);
-          } else {
-            // Update existing entry
-            const entry = newEntriesMap[rowId];
-            const rowIndex = i + 1;
-            timeSheet.getRange(rowIndex, 3, 1, 13).setValues([[
-              entry.projectName || "General",
-              entry.clockIn || "",
-              entry.clockOut || "",
-              entry.clockInLocation?.latitude || "",
-              entry.clockInLocation?.longitude || "",
-              entry.clockOutLocation?.latitude || "",
-              entry.clockOutLocation?.longitude || "",
-              entry.photos ? JSON.stringify(entry.photos) : "[]",
-              existingData[i][10] || "", // isBilled
-              entry.isExpense ? "TRUE" : "FALSE",
-              entry.expenseDescription || "",
-              entry.expenseAmount !== undefined ? entry.expenseAmount : "",
-              entry.notes || ""
-            ]]);
-            existingIdsInPayload[rowId] = true;
-          }
+      // 1. Update any matching rows in Google Sheet
+      for (let i = 1; i < existingData.length; i++) {
+        const rowId = String(existingData[i][0] || "");
+        if (newEntriesMap[rowId]) {
+          const entry = newEntriesMap[rowId];
+          const rowIndex = i + 1;
+          timeSheet.getRange(rowIndex, 2, 1, 14).setValues([[
+            profileId || String(existingData[i][1] || ""),
+            entry.projectName || "General",
+            entry.clockIn || "",
+            entry.clockOut || "",
+            entry.clockInLocation?.latitude !== undefined ? entry.clockInLocation.latitude : "",
+            entry.clockInLocation?.longitude !== undefined ? entry.clockInLocation.longitude : "",
+            entry.clockOutLocation?.latitude !== undefined ? entry.clockOutLocation.latitude : "",
+            entry.clockOutLocation?.longitude !== undefined ? entry.clockOutLocation.longitude : "",
+            entry.photos ? JSON.stringify(entry.photos) : "[]",
+            existingData[i][10] || "", // isBilled
+            entry.isExpense ? "TRUE" : "FALSE",
+            entry.expenseDescription || "",
+            entry.expenseAmount !== undefined ? entry.expenseAmount : "",
+            entry.notes || ""
+          ]]);
+          updatedIdsInSheet[rowId] = true;
         }
       }
 
-      // Add any brand-new entries
+      // 2. Append brand-new entries to Google Sheet
       newEntries.forEach(function(entry) {
-        if (!existingIdsInPayload[entry.id]) {
-          let existsOverall = false;
+        if (entry && entry.id && !updatedIdsInSheet[String(entry.id)]) {
+          let alreadyExists = false;
           for (let i = 1; i < existingData.length; i++) {
             if (matchId(existingData[i][0], entry.id)) {
-              existsOverall = true;
+              alreadyExists = true;
               break;
             }
           }
-          if (!existsOverall) {
+          if (!alreadyExists) {
             timeSheet.appendRow([
               entry.id,
               profileId,
               entry.projectName || "General",
               entry.clockIn || "",
               entry.clockOut || "",
-              entry.clockInLocation?.latitude || "",
-              entry.clockInLocation?.longitude || "",
-              entry.clockOutLocation?.latitude || "",
-              entry.clockOutLocation?.longitude || "",
+              entry.clockInLocation?.latitude !== undefined ? entry.clockInLocation.latitude : "",
+              entry.clockInLocation?.longitude !== undefined ? entry.clockInLocation.longitude : "",
+              entry.clockOutLocation?.latitude !== undefined ? entry.clockOutLocation.latitude : "",
+              entry.clockOutLocation?.longitude !== undefined ? entry.clockOutLocation.longitude : "",
               entry.photos ? JSON.stringify(entry.photos) : "[]",
               "",
               entry.isExpense ? "TRUE" : "FALSE",
@@ -459,11 +458,12 @@ function doPost(e) {
               entry.expenseAmount !== undefined ? entry.expenseAmount : "",
               entry.notes || ""
             ]);
+            updatedIdsInSheet[String(entry.id)] = true;
           }
         }
       });
 
-      return jsonResponse({ success: true, message: "Sync complete" });
+      return jsonResponse({ success: true, message: "Google Sheets sync complete" });
     }
 
     // 6. SAVE PROFILE
@@ -485,14 +485,22 @@ function doPost(e) {
       return jsonResponse({ success: true });
     }
 
-    // 7. FETCH USER DATA (High Performance)
+    // 7. FETCH USER DATA (Cross-Device Cloud Sync)
     if (action === "FETCH_USER_DATA") {
       const timeSheet = getSheet(ss, "TimeEntries");
       const tData = timeSheet ? timeSheet.getDataRange().getValues() : [];
+      const profileId = payload.profileId || "";
+      const employeeName = payload.name || "";
+      
       let entries = [];
       if (tData.length > 1) {
         entries = tData.slice(1)
-          .filter(r => matchId(r[1], payload.profileId))
+          .filter(r => {
+            const rowProfId = String(r[1] || "");
+            const matchProf = profileId && matchId(rowProfId, profileId);
+            const matchName = employeeName && (matchId(rowProfId, employeeName) || rowProfId.toLowerCase() === employeeName.toLowerCase());
+            return matchProf || matchName;
+          })
           .map(r => ({
             id: String(r[0]),
             profileId: String(r[1]),
@@ -515,12 +523,28 @@ function doPost(e) {
       let payReports = [];
       if (prData.length > 1) {
         payReports = prData.slice(1).map(r => {
-          try {
-            return JSON.parse(r[9]);
-          } catch(e) {
-            return null;
+          let parsed = safeJsonParse(r[9], null);
+          if (!parsed && r[0]) {
+            parsed = {
+              id: String(r[0]),
+              profileId: String(r[1] || ""),
+              employeeName: String(r[2] || ""),
+              periodLabel: String(r[3] || ""),
+              generatedAt: r[4] instanceof Date ? r[4].toISOString() : String(r[4] || ""),
+              totalHours: parseFloat(r[5]) || 0,
+              totalGrossPay: parseFloat(r[6]) || 0,
+              status: String(r[7] || "approved"),
+              notes: String(r[8] || ""),
+              timeEntries: []
+            };
           }
-        }).filter(r => r !== null && matchId(r.profileId, payload.profileId));
+          return parsed;
+        }).filter(r => {
+          if (!r) return false;
+          const matchProf = profileId && (matchId(r.profileId, profileId) || matchId(r.id, profileId));
+          const matchName = employeeName && (matchId(r.employeeName, employeeName) || String(r.employeeName).toLowerCase() === employeeName.toLowerCase());
+          return matchProf || matchName;
+        });
       }
 
       const schedulesSheet = getSheet(ss, "Schedules");
@@ -550,7 +574,39 @@ function doPost(e) {
         }).filter(Boolean);
       }
 
-      return jsonResponse({ success: true, data: { entries, payReports, schedules } });
+      const tasksSheet = getSheet(ss, "Tasks");
+      const taskData = tasksSheet ? tasksSheet.getDataRange().getValues() : [];
+      let tasks = [];
+      if (taskData.length > 1) {
+        tasks = taskData.slice(1).map(r => {
+          const parsed = safeJsonParse(r[8], null);
+          if (parsed) return parsed;
+          return {
+            id: String(r[0]),
+            profileId: String(r[1] || ""),
+            title: String(r[2] || ""),
+            completed: r[3] === true || r[3] === "TRUE" || r[3] === "true" || r[3] === 1,
+            priority: String(r[4] || "medium"),
+            category: String(r[5] || "General"),
+            photos: safeJsonParse(r[6], []),
+            createdAt: String(r[7] || new Date().toISOString())
+          };
+        }).filter(Boolean);
+      }
+
+      const usersSheet = getSheet(ss, "Users");
+      const uData = usersSheet ? usersSheet.getDataRange().getValues() : [];
+      let users = [];
+      if (uData.length > 1) {
+        users = uData.slice(1).map(r => ({
+          id: String(r[0]),
+          name: String(r[1] || ""),
+          hourlyWage: parseFloat(r[2]) || 0,
+          role: String(r[3] || "Employee")
+        }));
+      }
+
+      return jsonResponse({ success: true, data: { entries, payReports, schedules, tasks, users } });
     }
 
     // 8. FETCH ADMIN DATA
@@ -823,6 +879,126 @@ function doPost(e) {
         }
       }
       return jsonResponse({ success: false, error: "Schedule not found" });
+    }
+
+    // 10C. TASK MANAGEMENT (Synced to Google Sheets)
+    if (action === "FETCH_TASKS") {
+      const tasksSheet = getSheet(ss, "Tasks");
+      const tData = tasksSheet ? tasksSheet.getDataRange().getValues() : [];
+      let tasks = [];
+      if (tData.length > 1) {
+        tasks = tData.slice(1).map(r => {
+          const parsed = safeJsonParse(r[8], null);
+          if (parsed) return parsed;
+          return {
+            id: String(r[0]),
+            profileId: String(r[1] || ""),
+            title: String(r[2] || ""),
+            completed: r[3] === true || r[3] === "TRUE" || r[3] === "true" || r[3] === 1,
+            priority: String(r[4] || "medium"),
+            category: String(r[5] || "General"),
+            photos: safeJsonParse(r[6], []),
+            createdAt: String(r[7] || new Date().toISOString())
+          };
+        }).filter(Boolean);
+      }
+      return jsonResponse({ success: true, tasks: tasks, data: { tasks: tasks } });
+    }
+
+    if (action === "SAVE_TASK") {
+      const tasksSheet = getSheet(ss, "Tasks");
+      const task = payload.task || payload;
+      if (!task || !task.id) return jsonResponse({ success: false, error: "Missing task ID" });
+      const tData = tasksSheet.getDataRange().getValues();
+      const rowPayload = [
+        task.id,
+        task.profileId || "",
+        task.title || "",
+        task.completed ? "TRUE" : "FALSE",
+        task.priority || "medium",
+        task.category || "General",
+        JSON.stringify(task.photos || []),
+        task.createdAt || new Date().toISOString(),
+        JSON.stringify(task)
+      ];
+
+      let updated = false;
+      for (let i = 1; i < tData.length; i++) {
+        if (matchId(tData[i][0], task.id)) {
+          tasksSheet.getRange(i + 1, 1, 1, 9).setValues([rowPayload]);
+          updated = true;
+          break;
+        }
+      }
+      if (!updated) {
+        tasksSheet.appendRow(rowPayload);
+      }
+      return jsonResponse({ success: true, task: task });
+    }
+
+    if (action === "DELETE_TASK") {
+      const tasksSheet = getSheet(ss, "Tasks");
+      const tData = tasksSheet.getDataRange().getValues();
+      const taskId = payload.id || payload.taskId;
+      for (let i = 1; i < tData.length; i++) {
+        if (matchId(tData[i][0], taskId)) {
+          tasksSheet.deleteRow(i + 1);
+          return jsonResponse({ success: true });
+        }
+      }
+      return jsonResponse({ success: false, error: "Task not found" });
+    }
+
+    if (action === "SYNC_TASKS") {
+      const tasksSheet = getSheet(ss, "Tasks");
+      const tData = tasksSheet.getDataRange().getValues();
+      const newTasks = payload.tasks || [];
+      const newTasksMap = {};
+      newTasks.forEach(t => { if (t && t.id) newTasksMap[String(t.id)] = t; });
+
+      const updatedIds = {};
+      for (let i = 1; i < tData.length; i++) {
+        const rowId = String(tData[i][0] || "");
+        if (newTasksMap[rowId]) {
+          const t = newTasksMap[rowId];
+          tasksSheet.getRange(i + 1, 1, 1, 9).setValues([[
+            t.id,
+            t.profileId || String(tData[i][1] || ""),
+            t.title || "",
+            t.completed ? "TRUE" : "FALSE",
+            t.priority || "medium",
+            t.category || "General",
+            JSON.stringify(t.photos || []),
+            t.createdAt || String(tData[i][7] || new Date().toISOString()),
+            JSON.stringify(t)
+          ]]);
+          updatedIds[rowId] = true;
+        }
+      }
+
+      newTasks.forEach(t => {
+        if (t && t.id && !updatedIds[String(t.id)]) {
+          let exists = false;
+          for (let i = 1; i < tData.length; i++) {
+            if (matchId(tData[i][0], t.id)) { exists = true; break; }
+          }
+          if (!exists) {
+            tasksSheet.appendRow([
+              t.id,
+              t.profileId || "",
+              t.title || "",
+              t.completed ? "TRUE" : "FALSE",
+              t.priority || "medium",
+              t.category || "General",
+              JSON.stringify(t.photos || []),
+              t.createdAt || new Date().toISOString(),
+              JSON.stringify(t)
+            ]);
+            updatedIds[String(t.id)] = true;
+          }
+        }
+      });
+      return jsonResponse({ success: true });
     }
 
     // 11. COMPANY INFO

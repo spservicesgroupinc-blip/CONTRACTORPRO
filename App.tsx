@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { UserProfile, TimeEntry, Coordinates, Task, PayReport, ScheduleEvent } from './types';
 import ProfileSetup from './components/ProfileSetup';
 import TimeLog from './components/TimeLog';
@@ -13,7 +13,7 @@ import ShiftReminderBanner from './components/ShiftReminderBanner';
 import { ScheduleCalendar } from './components/ScheduleCalendar';
 import { checkAndSendShiftReminders, check8HourWarningAndAutoClockOut } from './services/reminderService';
 import { chatService } from './services/chatService';
-import { Clock, FileText, DollarSign, LayoutGrid, User, CalendarDays, Calendar, Square, Trash2, Plus, CheckCircle2, Wallet, LogOut, ShieldAlert, MessageSquare, Mic, MicOff, Sparkles, Loader2, Briefcase, Tag, AlertCircle, X, Check, StopCircle, ChevronRight, Camera, Search, Download, Edit3, Filter } from 'lucide-react';
+import { Clock, FileText, DollarSign, LayoutGrid, User, CalendarDays, Calendar, Square, Trash2, Plus, CheckCircle2, Wallet, LogOut, ShieldAlert, MessageSquare, Mic, MicOff, Sparkles, Loader2, Briefcase, Tag, AlertCircle, X, Check, StopCircle, ChevronRight, Camera, Search, Download, Edit3, Filter, RefreshCw, Cloud } from 'lucide-react';
 import { getDirectImageUrl } from './photoUtils';
 
 export const getEntryDuration = (entry: TimeEntry, fallbackTimeMs: number) => {
@@ -71,57 +71,20 @@ const App: React.FC = () => {
     };
 
     const handleLogout = () => {
-        if (profile) {
-            localStorage.removeItem(`geotime_entries_${profile.id}`);
-        }
         localStorage.removeItem('currentUser');
         setProfile(null);
         setTimeEntries([]);
+        setPayReports([]);
+        setTasks([]);
+        setSchedules([]);
         chatService.clearCache();
     };
 
-    const [timeEntries, setTimeEntries] = useState<TimeEntry[]>(() => {
-        try {
-            const savedUser = localStorage.getItem('currentUser');
-            if (savedUser) {
-                const u = JSON.parse(savedUser);
-                if (u && u.id) {
-                    const savedEntries = localStorage.getItem(`geotime_entries_${u.id}`);
-                    return savedEntries ? JSON.parse(savedEntries) : [];
-                }
-            }
-        } catch {}
-        return [];
-    });
-
-    useEffect(() => {
-        if (profile) {
-            localStorage.setItem(`geotime_entries_${profile.id}`, JSON.stringify(timeEntries));
-        }
-    }, [timeEntries, profile]);
-
+    const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
     const [projects, setProjects] = useState<string[]>(['General']);
 
-    // Pay Reports persistent state
-    const [payReports, setPayReports] = useState<PayReport[]>(() => {
-        try {
-            const savedUser = localStorage.getItem('currentUser');
-            if (savedUser) {
-                const u = JSON.parse(savedUser);
-                if (u && u.id) {
-                    const savedReports = localStorage.getItem(`geotime_pay_reports_${u.id}`);
-                    return savedReports ? JSON.parse(savedReports) : [];
-                }
-            }
-        } catch {}
-        return [];
-    });
-
-    useEffect(() => {
-        if (profile) {
-            localStorage.setItem(`geotime_pay_reports_${profile.id}`, JSON.stringify(payReports));
-        }
-    }, [payReports, profile]);
+    // Pay Reports persistent state (Stored authoritatively in Google Sheets)
+    const [payReports, setPayReports] = useState<PayReport[]>([]);
 
     // Pay Log UI sub-tab & modal states
     const [paylogSubTab, setPaylogSubTab] = useState<'entries' | 'reports'>('entries');
@@ -130,19 +93,12 @@ const App: React.FC = () => {
     const [payReportFilterStatus, setPayReportFilterStatus] = useState<string>('all');
     const [payReportSearchQuery, setPayReportSearchQuery] = useState<string>('');
     
+    // Cloud sync state indicators
+    const [isCloudSyncing, setIsCloudSyncing] = useState(false);
+    const [cloudSyncSuccess, setCloudSyncSuccess] = useState<string | null>(null);
+    
     // Tasks & AI Generator States
-    const [tasks, setTasks] = useState<Task[]>(() => {
-        try {
-            const saved = localStorage.getItem('geotime_tasks');
-            return saved ? JSON.parse(saved) : [];
-        } catch {
-            return [];
-        }
-    });
-
-    useEffect(() => {
-        localStorage.setItem('geotime_tasks', JSON.stringify(tasks));
-    }, [tasks]);
+    const [tasks, setTasks] = useState<Task[]>([]);
 
     // Bottom FAB slide-up state
     const [isSlideUpOpen, setIsSlideUpOpen] = useState(false);
@@ -402,7 +358,7 @@ const App: React.FC = () => {
         });
     };
 
-    const applyAiTasks = () => {
+    const applyAiTasks = async () => {
         const newTasks: Task[] = checkedReviewIndexes.map(idx => {
             const aiTask = aiResults[idx];
             return {
@@ -422,9 +378,26 @@ const App: React.FC = () => {
         setManualInput('');
         setSelectedTaskProjectFilter(selectedReviewProject);
         setCurrentTab('tasks');
+
+        if (profile && newTasks.length > 0) {
+            try {
+                await fetch('/api/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        payload: {
+                            action: 'SYNC_TASKS',
+                            payload: { tasks: newTasks, profileId: profile.id }
+                        }
+                    })
+                });
+            } catch (e) {
+                console.error('Error syncing AI tasks to Google Sheets:', e);
+            }
+        }
     };
 
-    const handleSaveManualTask = () => {
+    const handleSaveManualTask = async () => {
         const text = manualInput.trim();
         if (!text) return;
 
@@ -443,9 +416,26 @@ const App: React.FC = () => {
         setIsAiRecorderOpen(false);
         setSelectedTaskProjectFilter(selectedReviewProject || 'General');
         setCurrentTab('tasks');
+
+        if (profile) {
+            try {
+                await fetch('/api/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        payload: {
+                            action: 'SAVE_TASK',
+                            payload: { task: newTask, profileId: profile.id }
+                        }
+                    })
+                });
+            } catch (e) {
+                console.error('Error saving manual task to Google Sheets:', e);
+            }
+        }
     };
 
-    const handleCreateQuickTask = (e: React.FormEvent) => {
+    const handleCreateQuickTask = async (e: React.FormEvent) => {
         e.preventDefault();
         const trimmed = quickTaskTitle.trim();
         if (!trimmed) return;
@@ -467,6 +457,23 @@ const App: React.FC = () => {
         setIsNewTaskPopupOpen(false);
         setSelectedTaskProjectFilter(selectedProject || 'General');
         setCurrentTab('tasks');
+
+        if (profile) {
+            try {
+                await fetch('/api/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        payload: {
+                            action: 'SAVE_TASK',
+                            payload: { task: newTask, profileId: profile.id }
+                        }
+                    })
+                });
+            } catch (e) {
+                console.error('Error saving quick task to Google Sheets:', e);
+            }
+        }
     };
 
     // Derived State
@@ -486,19 +493,8 @@ const App: React.FC = () => {
     const [newProjectName, setNewProjectName] = useState('');
     const [selectedProject, setSelectedProject] = useState<string>('General');
 
-    // Schedules persistent state
-    const [schedules, setSchedules] = useState<ScheduleEvent[]>(() => {
-        try {
-            const saved = localStorage.getItem('geotime_schedules');
-            return saved ? JSON.parse(saved) : [];
-        } catch {
-            return [];
-        }
-    });
-
-    useEffect(() => {
-        localStorage.setItem('geotime_schedules', JSON.stringify(schedules));
-    }, [schedules]);
+    // Schedules persistent state (Stored in Google Sheets)
+    const [schedules, setSchedules] = useState<ScheduleEvent[]>([]);
 
     const [allUsers, setAllUsers] = useState<Array<{ id: string; name: string; role?: string; hourlyWage?: number }>>([]);
 
@@ -617,7 +613,90 @@ const App: React.FC = () => {
         }
     }, [timeEntries, profile]);
 
-    // Initial load: Profile save triggers GAS user creation and load projects
+    // Cloud data synchronization engine
+    const fetchUserData = useCallback(async (currentProfile = profile, isBackground = false) => {
+        if (!currentProfile) return;
+        if (!isBackground) setIsCloudSyncing(true);
+        try {
+            // 1. Fetch user data (Time entries, Pay reports, Schedules, Tasks, Users)
+            const res = await fetch('/api/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    payload: { 
+                        action: 'FETCH_USER_DATA', 
+                        payload: { profileId: currentProfile.id, name: currentProfile.name } 
+                    }
+                })
+            });
+            const data = await res.json();
+            if (data && data.success && data.data) {
+                if (Array.isArray(data.data.entries)) {
+                    const remoteEntries: TimeEntry[] = data.data.entries;
+                    const nowMs = Date.now();
+
+                    setTimeEntries(prev => {
+                        const map = new Map<string, TimeEntry>();
+                        // Populate from remote (Google Sheets is the single source of truth)
+                        remoteEntries.forEach(e => {
+                            if (!e.clockOut && !e.isExpense && e.clockIn) {
+                                const shiftDurationHours = (nowMs - new Date(e.clockIn).getTime()) / (1000 * 60 * 60);
+                                if (shiftDurationHours >= 9) {
+                                    const autoOutTime = new Date(new Date(e.clockIn).getTime() + 9 * 3600 * 1000).toISOString();
+                                    const autoNote = (e.notes ? e.notes + '\n' : '') + '[Auto Clock-Out: 9h limit reached]';
+                                    e = { ...e, clockOut: autoOutTime, notes: autoNote };
+                                }
+                            }
+                            map.set(e.id, e);
+                        });
+
+                        // Preserve any active local shift created just seconds ago that hasn't synced yet
+                        prev.forEach(e => {
+                            if (!map.has(e.id)) {
+                                if (!e.clockOut && !e.isExpense && e.clockIn) {
+                                    const shiftDurationHours = (nowMs - new Date(e.clockIn).getTime()) / (1000 * 60 * 60);
+                                    if (shiftDurationHours >= 9) {
+                                        const autoOutTime = new Date(new Date(e.clockIn).getTime() + 9 * 3600 * 1000).toISOString();
+                                        const autoNote = (e.notes ? e.notes + '\n' : '') + '[Auto Clock-Out: 9h limit reached]';
+                                        e = { ...e, clockOut: autoOutTime, notes: autoNote };
+                                    }
+                                }
+                                map.set(e.id, e);
+                            }
+                        });
+
+                        return Array.from(map.values()).sort((a, b) => 
+                            new Date(a.clockIn).getTime() - new Date(b.clockIn).getTime()
+                        );
+                    });
+                }
+
+                if (Array.isArray(data.data.payReports)) {
+                    setPayReports(data.data.payReports);
+                }
+                if (Array.isArray(data.data.schedules)) {
+                    setSchedules(data.data.schedules);
+                }
+                if (Array.isArray(data.data.tasks)) {
+                    setTasks(data.data.tasks);
+                }
+                if (Array.isArray(data.data.users)) {
+                    setAllUsers(data.data.users);
+                }
+
+                if (!isBackground) {
+                    setCloudSyncSuccess('Google Sheets synced successfully');
+                    setTimeout(() => setCloudSyncSuccess(null), 3000);
+                }
+            }
+        } catch (e) {
+            console.error('Error fetching user data from Google Sheets:', e);
+        } finally {
+            if (!isBackground) setIsCloudSyncing(false);
+        }
+    }, [profile]);
+
+    // Initial load & profile synchronization
     useEffect(() => {
         if (profile) {
             // Setup / sync user profile
@@ -648,73 +727,16 @@ const App: React.FC = () => {
             })
             .catch(e => console.error('Error loading projects/company info:', e));
 
-            // Load user time entries & pay reports
-            fetch('/api/sync', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    payload: { action: 'FETCH_USER_DATA', payload: { profileId: profile.id } }
-                })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data && data.success && data.data) {
-                    if (Array.isArray(data.data.entries)) {
-                        const remoteEntries: TimeEntry[] = data.data.entries;
-                        const nowMs = Date.now();
+            // Authoritative fetch from Google Sheets
+            fetchUserData(profile, false);
 
-                        setTimeEntries(prev => {
-                            const map = new Map<string, TimeEntry>();
-                            // Populate from remote (server is authoritative for closed shifts)
-                            remoteEntries.forEach(e => {
-                                // Auto clock-out any dangling open shifts older than 9 hours
-                                if (!e.clockOut && !e.isExpense && e.clockIn) {
-                                    const shiftDurationHours = (nowMs - new Date(e.clockIn).getTime()) / (1000 * 60 * 60);
-                                    if (shiftDurationHours >= 9) {
-                                        const autoOutTime = new Date(new Date(e.clockIn).getTime() + 9 * 3600 * 1000).toISOString();
-                                        const autoNote = (e.notes ? e.notes + '\n' : '') + '[Auto Clock-Out: 9h limit reached]';
-                                        e = { ...e, clockOut: autoOutTime, notes: autoNote };
-                                    }
-                                }
-                                map.set(e.id, e);
-                            });
-
-                            // Preserve any brand new local unsynced entries that haven't hit server yet
-                            prev.forEach(e => {
-                                const existing = map.get(e.id);
-                                if (!existing) {
-                                    // Check if stale active local entry exceeds 9 hours
-                                    if (!e.clockOut && !e.isExpense && e.clockIn) {
-                                        const shiftDurationHours = (nowMs - new Date(e.clockIn).getTime()) / (1000 * 60 * 60);
-                                        if (shiftDurationHours >= 9) {
-                                            const autoOutTime = new Date(new Date(e.clockIn).getTime() + 9 * 3600 * 1000).toISOString();
-                                            const autoNote = (e.notes ? e.notes + '\n' : '') + '[Auto Clock-Out: 9h limit reached]';
-                                            e = { ...e, clockOut: autoOutTime, notes: autoNote };
-                                        }
-                                    }
-                                    map.set(e.id, e);
-                                }
-                            });
-
-                            return Array.from(map.values()).sort((a, b) => 
-                                new Date(a.clockIn).getTime() - new Date(b.clockIn).getTime()
-                            );
-                        });
-                    }
-                    if (Array.isArray(data.data.payReports)) {
-                        setPayReports(data.data.payReports);
-                    }
-                    if (Array.isArray(data.data.schedules)) {
-                        setSchedules(data.data.schedules);
-                    }
-                    if (Array.isArray(data.data.users)) {
-                        setAllUsers(data.data.users);
-                    }
-                }
-            })
-            .catch(e => console.error('Error fetching user data:', e));
+            // Periodic background sync from Google Sheets (every 45 seconds)
+            const syncInterval = setInterval(() => {
+                fetchUserData(profile, true);
+            }, 45000);
+            return () => clearInterval(syncInterval);
         }
-    }, [profile]);
+    }, [profile, fetchUserData]);
 
     const handleSavePayReport = async (report: PayReport) => {
         setPayReports(prev => {
@@ -1113,16 +1135,112 @@ const App: React.FC = () => {
         }
     };
 
-    const handleUpdateTimeEntry = (updated: TimeEntry) => {
+    const handleUpdateTimeEntry = async (updated: TimeEntry) => {
         setTimeEntries(prev => prev.map(e => e.id === updated.id ? updated : e));
+        if (profile) {
+            try {
+                await fetch('/api/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        payload: {
+                            action: 'EDIT_TIME_ENTRY',
+                            payload: { entry: updated, profileId: profile.id }
+                        }
+                    })
+                });
+            } catch (err) {
+                console.error('Error updating time entry in Google Sheets:', err);
+            }
+        }
     };
 
-    const handleDeleteTimeEntry = (id: string) => {
+    const handleDeleteTimeEntry = async (id: string) => {
         setTimeEntries(prev => prev.filter(e => e.id !== id));
+        if (profile) {
+            try {
+                await fetch('/api/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        payload: {
+                            action: 'DELETE_TIME_ENTRY',
+                            payload: { entryId: id, profileId: profile.id }
+                        }
+                    })
+                });
+            } catch (err) {
+                console.error('Error deleting time entry from Google Sheets:', err);
+            }
+        }
     };
 
-    const handleAddTimeEntry = (newEntry: TimeEntry) => {
+    const handleAddTimeEntry = async (newEntry: TimeEntry) => {
         setTimeEntries(prev => [...prev, newEntry]);
+        if (profile) {
+            try {
+                await fetch('/api/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        payload: {
+                            action: 'SYNC_ENTRIES',
+                            payload: { profileId: profile.id, entries: [newEntry] }
+                        }
+                    })
+                });
+            } catch (err) {
+                console.error('Error adding time entry to Google Sheets:', err);
+            }
+        }
+    };
+
+    const handleSaveTask = async (task: Task) => {
+        setTasks(prev => {
+            const idx = prev.findIndex(t => t.id === task.id);
+            if (idx >= 0) {
+                const updated = [...prev];
+                updated[idx] = task;
+                return updated;
+            }
+            return [task, ...prev];
+        });
+        if (profile) {
+            try {
+                await fetch('/api/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        payload: {
+                            action: 'SAVE_TASK',
+                            payload: { task, profileId: profile.id }
+                        }
+                    })
+                });
+            } catch (err) {
+                console.error('Error saving task to Google Sheets:', err);
+            }
+        }
+    };
+
+    const handleDeleteTask = async (taskId: string) => {
+        setTasks(prev => prev.filter(t => t.id !== taskId));
+        if (profile) {
+            try {
+                await fetch('/api/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        payload: {
+                            action: 'DELETE_TASK',
+                            payload: { taskId, profileId: profile.id }
+                        }
+                    })
+                });
+            } catch (err) {
+                console.error('Error deleting task from Google Sheets:', err);
+            }
+        }
     };
 
     const handleAddProject = async (e: React.FormEvent) => {
@@ -1543,9 +1661,9 @@ const App: React.FC = () => {
                                             <div className="flex items-center gap-3 flex-1 min-w-0">
                                                 <button 
                                                     onClick={() => {
-                                                        setTasks(tasks.map(task => task.id === t.id ? { ...task, completed: !task.completed } : task));
+                                                        handleSaveTask({ ...t, completed: !t.completed });
                                                     }}
-                                                    className="focus:outline-none shrink-0"
+                                                    className="focus:outline-none shrink-0 cursor-pointer"
                                                 >
                                                     {t.completed ? (
                                                         <CheckCircle2 className="w-5 h-5 text-emerald-600 fill-emerald-50" />
@@ -1605,7 +1723,7 @@ const App: React.FC = () => {
                                                             });
                                                             const data = await res.json();
                                                             if (data.success && data.data?.url) {
-                                                                setTasks(tasks.map(task => task.id === t.id ? { ...task, photos: [...(task.photos || []), data.data.url] } : task));
+                                                                handleSaveTask({ ...t, photos: [...(t.photos || []), data.data.url] });
                                                             }
                                                         } catch (err) {
                                                             console.error('Task photo upload failed:', err);
@@ -1614,8 +1732,8 @@ const App: React.FC = () => {
                                                     <Camera className="w-4 h-4" />
                                                 </label>
                                                 <button 
-                                                    onClick={() => setTasks(tasks.filter(task => task.id !== t.id))}
-                                                    className="text-gray-300 hover:text-red-500 p-1 rounded-full hover:bg-red-50 transition-colors shrink-0"
+                                                    onClick={() => handleDeleteTask(t.id)}
+                                                    className="text-gray-300 hover:text-red-500 p-1 rounded-full hover:bg-red-50 transition-colors shrink-0 cursor-pointer"
                                                     title="Delete Task"
                                                 >
                                                     <Trash2 className="w-4 h-4" />
@@ -1704,17 +1822,43 @@ const App: React.FC = () => {
                         {/* Top Header & Export Action */}
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                             <div>
-                                <h2 className="text-2xl font-bold text-gray-800">Pay Log</h2>
+                                <div className="flex items-center gap-2">
+                                    <h2 className="text-2xl font-bold text-gray-800">Pay Log</h2>
+                                    {isCloudSyncing ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-600 animate-pulse">
+                                            <RefreshCw className="w-2.5 h-2.5 animate-spin" /> Syncing...
+                                        </span>
+                                    ) : cloudSyncSuccess ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-600">
+                                            <CheckCircle2 className="w-2.5 h-2.5" /> Synced
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-500">
+                                            <Cloud className="w-2.5 h-2.5 text-blue-500" /> Cloud Connected
+                                        </span>
+                                    )}
+                                </div>
                                 <p className="text-xs text-gray-500 mt-0.5">Track live hours & access generated pay reports stored in Google Sheets</p>
                             </div>
-                            <button
-                                onClick={handleExportAndSavePayReport}
-                                disabled={filteredPaylogEntries.length === 0}
-                                className="bg-[#2563eb] text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all cursor-pointer"
-                            >
-                                <Download className="w-4 h-4" />
-                                Export & Save Report
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => fetchUserData(profile, false)}
+                                    disabled={isCloudSyncing}
+                                    title="Fetch fresh data directly from Google Sheets"
+                                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3.5 py-2.5 rounded-xl text-xs font-bold shadow-sm disabled:opacity-50 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                                >
+                                    <RefreshCw className={`w-3.5 h-3.5 text-gray-600 ${isCloudSyncing ? 'animate-spin' : ''}`} />
+                                    Sync Sheets
+                                </button>
+                                <button
+                                    onClick={handleExportAndSavePayReport}
+                                    disabled={filteredPaylogEntries.length === 0}
+                                    className="bg-[#2563eb] text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all cursor-pointer"
+                                >
+                                    <Download className="w-4 h-4" />
+                                    Export & Save Report
+                                </button>
+                            </div>
                         </div>
 
                         {/* Sub-navigation Switcher */}
