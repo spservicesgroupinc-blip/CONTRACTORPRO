@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserProfile, TimeEntry, Invoice, InvoiceItem, Customer } from '../types';
+import { UserProfile, TimeEntry, Invoice, InvoiceItem, Customer, ScheduleEvent } from '../types';
 import { 
     ShieldAlert, 
     Users, 
@@ -30,6 +30,7 @@ import {
 import { generateInvoicePDF } from '../services/pdfService';
 import Messaging from './Messaging';
 import AdminBottomNav from './AdminBottomNav';
+import { ScheduleCalendar } from './ScheduleCalendar';
 import { chatService } from '../services/chatService';
 import { getDirectImageUrl } from '../photoUtils';
 
@@ -45,6 +46,7 @@ interface AdminData {
     projects: string[];
     customers: Customer[];
     companyInfo?: any;
+    schedules?: ScheduleEvent[];
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile }) => {
@@ -69,12 +71,52 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
     const [unreadChatCount, setUnreadChatCount] = useState(0);
     
     // Hub State ('hub' is the main dashboard launcher, replacing a big clutter of buttons)
-    const [activeTab, setActiveTabState] = useState<'hub' | 'live' | 'employees' | 'customers' | 'invoices' | 'jobs' | 'chat' | 'company'>('hub');
+    const [activeTab, setActiveTabState] = useState<'hub' | 'live' | 'employees' | 'customers' | 'invoices' | 'jobs' | 'chat' | 'company' | 'calendar'>('hub');
 
-    const setActiveTab = async (tab: 'hub' | 'live' | 'employees' | 'customers' | 'invoices' | 'jobs' | 'chat' | 'company') => {
+    const setActiveTab = async (tab: 'hub' | 'live' | 'employees' | 'customers' | 'invoices' | 'jobs' | 'chat' | 'company' | 'calendar') => {
         setActiveTabState(tab);
         if (tab !== 'hub') {
             await fetchAdminData();
+        }
+    };
+
+    const handleSaveSchedule = async (schedule: ScheduleEvent) => {
+        setIsLoading(true);
+        try {
+            const res = await fetch('/api/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    payload: { action: 'SAVE_SCHEDULE', payload: { schedule } }
+                })
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Failed to save schedule');
+            await fetchAdminData();
+        } catch (err: any) {
+            alert('Failed to save schedule: ' + err.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleDeleteSchedule = async (scheduleId: string) => {
+        setIsLoading(true);
+        try {
+            const res = await fetch('/api/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    payload: { action: 'DELETE_SCHEDULE', payload: { id: scheduleId } }
+                })
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Failed to delete schedule');
+            await fetchAdminData();
+        } catch (err: any) {
+            alert('Failed to delete schedule: ' + err.message);
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -790,6 +832,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                             Projects
                         </button>
                         <button
+                            onClick={() => setActiveTab('calendar')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                activeTab === 'calendar' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-200 hover:text-white hover:bg-blue-800/50'
+                            }`}
+                        >
+                            Calendar
+                        </button>
+                        <button
                             onClick={() => setActiveTab('chat')}
                             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all relative ${
                                 activeTab === 'chat' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-200 hover:text-white hover:bg-blue-800/50'
@@ -966,6 +1016,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                                     </div>
                                 </div>
                                 <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-amber-650 group-hover:translate-x-0.5 transition-all shrink-0" />
+                            </button>
+
+                            {/* 4B. Field Dispatch & Scheduling */}
+                            <button 
+                                onClick={() => setActiveTab('calendar')}
+                                className="w-full bg-white hover:bg-slate-50 border border-slate-100 rounded-2xl p-4 text-left transition-all active:scale-98 shadow-sm flex items-center justify-between group cursor-pointer"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <div className="w-11 h-11 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center shrink-0 group-hover:bg-orange-100 transition-colors">
+                                        <Calendar className="w-5.5 h-5.5" />
+                                    </div>
+                                    <div>
+                                        <div className="flex items-center gap-1.5">
+                                            <h4 className="font-bold text-slate-800 text-sm group-hover:text-orange-600 transition-colors">Schedule & Calendar</h4>
+                                            {adminData?.schedules && adminData.schedules.length > 0 && (
+                                                <span className="bg-orange-100 text-orange-700 text-[10px] font-extrabold px-1.5 py-0.2 rounded-full">
+                                                    {adminData.schedules.length}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-slate-500 mt-0.5">Assign shifts, dispatch jobsites, and manage team schedule.</p>
+                                    </div>
+                                </div>
+                                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-orange-600 group-hover:translate-x-0.5 transition-all shrink-0" />
                             </button>
 
                             {/* 5. Invoicing & Invoices */}
@@ -2161,6 +2235,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                                 {isLoading ? 'Saving...' : 'Sync Master Company Settings'}
                             </button>
                         </div>
+                    </div>
+                )}
+
+                {/* I. CREW SCHEDULING & CALENDAR VIEWPORT */}
+                {activeTab === 'calendar' && (
+                    <div className="flex-1 flex flex-col animate-in slide-in-from-right duration-200">
+                        {/* Sub-Header */}
+                        <div className="flex items-center justify-between mb-4 pl-1 shrink-0">
+                            <div className="flex items-center gap-3">
+                                <button onClick={() => setActiveTab('hub')} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-all cursor-pointer">
+                                    <ChevronLeft className="w-5 h-5" />
+                                </button>
+                                <div>
+                                    <h1 className="text-base font-bold text-slate-800 leading-none">Crew Scheduling & Calendar</h1>
+                                    <p className="text-xs text-slate-500 mt-0.5">Assign shifts, manage jobsite dates, and prevent crew conflicts</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <ScheduleCalendar 
+                            schedules={adminData?.schedules || []}
+                            projects={adminData?.projects || ['General']}
+                            users={adminData?.users || []}
+                            currentUser={profile}
+                            onSaveSchedule={handleSaveSchedule}
+                            onDeleteSchedule={handleDeleteSchedule}
+                            isLoading={isLoading}
+                        />
                     </div>
                 )}
             </div>

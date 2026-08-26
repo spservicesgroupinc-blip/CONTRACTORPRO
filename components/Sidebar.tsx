@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock, LayoutGrid, MessageSquare, Wallet, User, Lock, LogOut, Briefcase } from 'lucide-react';
+import { Clock, LayoutGrid, MessageSquare, Wallet, User, Lock, LogOut, Briefcase, Calendar } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -80,6 +80,12 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, currentTab, setCur
             label="Time Tracker" 
             isActive={currentTab === 'time'} 
             onClick={() => { setCurrentTab('time'); setIsOpen(false); }} 
+          />
+          <NavItem 
+            icon={Calendar} 
+            label="Schedule & Calendar" 
+            isActive={currentTab === 'calendar'} 
+            onClick={() => { setCurrentTab('calendar'); setIsOpen(false); }} 
           />
           <NavItem 
             icon={LayoutGrid} 

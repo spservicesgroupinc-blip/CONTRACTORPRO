@@ -148,6 +148,10 @@ function initializeSheetHeaders(sheet, name) {
     sheet.appendRow(["Report ID", "Profile ID", "Employee Name", "Period Label", "Generated At", "Total Hours", "Total Pay", "Status", "Notes", "Payload JSON"]);
     sheet.getRange("A1:J1").setFontWeight("bold");
     sheet.setFrozenRows(1);
+  } else if (name === "Schedules") {
+    sheet.appendRow(["Schedule ID", "Title", "Project Name", "Start Date", "End Date", "Start Time", "End Time", "Assigned To IDs", "Assigned Names", "Location", "Notes", "Status", "Priority", "Color", "Created At", "Payload JSON"]);
+    sheet.getRange("A1:P1").setFontWeight("bold");
+    sheet.setFrozenRows(1);
   }
 }
 
@@ -519,7 +523,34 @@ function doPost(e) {
         }).filter(r => r !== null && matchId(r.profileId, payload.profileId));
       }
 
-      return jsonResponse({ success: true, data: { entries, payReports } });
+      const schedulesSheet = getSheet(ss, "Schedules");
+      const sData = schedulesSheet ? schedulesSheet.getDataRange().getValues() : [];
+      let schedules = [];
+      if (sData.length > 1) {
+        schedules = sData.slice(1).map(r => {
+          const parsed = safeJsonParse(r[15], null);
+          if (parsed) return parsed;
+          return {
+            id: String(r[0]),
+            title: String(r[1] || ""),
+            projectName: String(r[2] || "General"),
+            startDate: String(r[3] || ""),
+            endDate: r[4] ? String(r[4]) : undefined,
+            startTime: r[5] ? String(r[5]) : undefined,
+            endTime: r[6] ? String(r[6]) : undefined,
+            assignedTo: safeJsonParse(r[7], []),
+            assignedNames: safeJsonParse(r[8], []),
+            location: r[9] ? String(r[9]) : undefined,
+            notes: r[10] ? String(r[10]) : undefined,
+            status: String(r[11] || "scheduled"),
+            priority: String(r[12] || "medium"),
+            color: r[13] ? String(r[13]) : "#2563eb",
+            createdAt: r[14] ? String(r[14]) : new Date().toISOString()
+          };
+        }).filter(Boolean);
+      }
+
+      return jsonResponse({ success: true, data: { entries, payReports, schedules } });
     }
 
     // 8. FETCH ADMIN DATA
@@ -531,6 +562,7 @@ function doPost(e) {
       const companySheet = getSheet(ss, "CompanyInfo");
       const customersSheet = getSheet(ss, "Customers");
       const payReportsSheet = getSheet(ss, "PayReports");
+      const schedulesSheet = getSheet(ss, "Schedules");
 
       const uData = usersSheet.getDataRange().getValues();
       const tData = timeSheet.getDataRange().getValues();
@@ -539,6 +571,7 @@ function doPost(e) {
       const cInfoData = companySheet.getDataRange().getValues();
       const cData = customersSheet.getDataRange().getValues();
       const prData = payReportsSheet.getDataRange().getValues();
+      const sData = schedulesSheet.getDataRange().getValues();
 
       let users = [];
       if (uData.length > 1) {
@@ -598,7 +631,32 @@ function doPost(e) {
         payReports = prData.slice(1).map(r => safeJsonParse(r[9], null)).filter(Boolean);
       }
 
-      return jsonResponse({ success: true, data: { users, entries, invoices, projects, customers, companyInfo, payReports } });
+      let schedules = [];
+      if (sData.length > 1) {
+        schedules = sData.slice(1).map(r => {
+          const parsed = safeJsonParse(r[15], null);
+          if (parsed) return parsed;
+          return {
+            id: String(r[0]),
+            title: String(r[1] || ""),
+            projectName: String(r[2] || "General"),
+            startDate: String(r[3] || ""),
+            endDate: r[4] ? String(r[4]) : undefined,
+            startTime: r[5] ? String(r[5]) : undefined,
+            endTime: r[6] ? String(r[6]) : undefined,
+            assignedTo: safeJsonParse(r[7], []),
+            assignedNames: safeJsonParse(r[8], []),
+            location: r[9] ? String(r[9]) : undefined,
+            notes: r[10] ? String(r[10]) : undefined,
+            status: String(r[11] || "scheduled"),
+            priority: String(r[12] || "medium"),
+            color: r[13] ? String(r[13]) : "#2563eb",
+            createdAt: r[14] ? String(r[14]) : new Date().toISOString()
+          };
+        }).filter(Boolean);
+      }
+
+      return jsonResponse({ success: true, data: { users, entries, invoices, projects, customers, companyInfo, payReports, schedules } });
     }
 
     // 9. PHOTO UPLOADS
@@ -676,6 +734,95 @@ function doPost(e) {
         }
       }
       return jsonResponse({ success: false, error: "Report not found" });
+    }
+
+    // 10B. SCHEDULE & CALENDAR DISPATCH
+    if (action === "FETCH_SCHEDULES") {
+      const schedulesSheet = getSheet(ss, "Schedules");
+      const sData = schedulesSheet ? schedulesSheet.getDataRange().getValues() : [];
+      let schedules = [];
+      if (sData.length > 1) {
+        schedules = sData.slice(1).map(r => {
+          const parsed = safeJsonParse(r[15], null);
+          if (parsed) return parsed;
+          return {
+            id: String(r[0]),
+            title: String(r[1] || ""),
+            projectName: String(r[2] || "General"),
+            startDate: String(r[3] || ""),
+            endDate: r[4] ? String(r[4]) : undefined,
+            startTime: r[5] ? String(r[5]) : undefined,
+            endTime: r[6] ? String(r[6]) : undefined,
+            assignedTo: safeJsonParse(r[7], []),
+            assignedNames: safeJsonParse(r[8], []),
+            location: r[9] ? String(r[9]) : undefined,
+            notes: r[10] ? String(r[10]) : undefined,
+            status: String(r[11] || "scheduled"),
+            priority: String(r[12] || "medium"),
+            color: r[13] ? String(r[13]) : "#2563eb",
+            createdAt: r[14] ? String(r[14]) : new Date().toISOString()
+          };
+        }).filter(Boolean);
+      }
+      return jsonResponse({ success: true, schedules: schedules, data: { schedules: schedules } });
+    }
+
+    if (action === "SAVE_SCHEDULE") {
+      const schedulesSheet = getSheet(ss, "Schedules");
+      const event = payload.schedule || payload.event || payload;
+      if (!event || !event.id) {
+        return jsonResponse({ success: false, error: "Missing schedule event ID" });
+      }
+
+      const sData = schedulesSheet.getDataRange().getValues();
+      let updated = false;
+      const rowPayload = [
+        event.id,
+        event.title || "",
+        event.projectName || "General",
+        event.startDate || "",
+        event.endDate || "",
+        event.startTime || "",
+        event.endTime || "",
+        JSON.stringify(event.assignedTo || []),
+        JSON.stringify(event.assignedNames || []),
+        event.location || "",
+        event.notes || "",
+        event.status || "scheduled",
+        event.priority || "medium",
+        event.color || "#2563eb",
+        event.createdAt || new Date().toISOString(),
+        JSON.stringify(event)
+      ];
+
+      for (let i = 1; i < sData.length; i++) {
+        if (matchId(sData[i][0], event.id)) {
+          schedulesSheet.getRange(i + 1, 1, 1, 16).setValues([rowPayload]);
+          updated = true;
+          break;
+        }
+      }
+
+      if (!updated) {
+        schedulesSheet.appendRow(rowPayload);
+      }
+
+      return jsonResponse({ success: true, schedule: event });
+    }
+
+    if (action === "DELETE_SCHEDULE") {
+      const schedulesSheet = getSheet(ss, "Schedules");
+      const sData = schedulesSheet.getDataRange().getValues();
+      const schedId = payload.id || payload.scheduleId;
+      if (!schedId) return jsonResponse({ success: false, error: "Missing schedule ID" });
+
+      for (let i = 1; i < sData.length; i++) {
+        if (matchId(sData[i][0], schedId)) {
+          schedulesSheet.deleteRow(i + 1);
+          return jsonResponse({ success: true, id: schedId });
+        }
+      }
+      return jsonResponse({ success: false, error: "Schedule not found" });
     }
 
     // 11. COMPANY INFO

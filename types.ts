@@ -99,5 +99,24 @@ export interface PayReport {
   timeEntries: TimeEntry[];
 }
 
+export interface ScheduleEvent {
+  id: string;
+  title: string;
+  projectName: string;
+  startDate: string; // 'YYYY-MM-DD'
+  endDate?: string;   // 'YYYY-MM-DD'
+  startTime?: string; // 'HH:mm' e.g. '07:30'
+  endTime?: string;   // 'HH:mm' e.g. '16:00'
+  assignedTo: string[]; // Worker Profile IDs
+  assignedNames: string[]; // Worker Names for display
+  location?: string;  // Jobsite address / location
+  notes?: string;     // Instructions, scope, gate codes
+  status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled';
+  priority?: 'high' | 'medium' | 'low';
+  color?: string;     // Theme color e.g. '#2563eb'
+  createdBy?: string;
+  createdAt: string;  // ISO string
+}
+
 
 

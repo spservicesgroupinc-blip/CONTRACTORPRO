@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { UserProfile, TimeEntry, Coordinates, Task, PayReport } from './types';
+import { UserProfile, TimeEntry, Coordinates, Task, PayReport, ScheduleEvent } from './types';
 import ProfileSetup from './components/ProfileSetup';
 import TimeLog from './components/TimeLog';
 import { getCurrentPosition } from './services/locationService';
@@ -10,9 +10,10 @@ import Messaging from './components/Messaging';
 import BottomNav from './components/BottomNav';
 import Sidebar from './components/Sidebar';
 import ShiftReminderBanner from './components/ShiftReminderBanner';
+import { ScheduleCalendar } from './components/ScheduleCalendar';
 import { checkAndSendShiftReminders, check8HourWarningAndAutoClockOut } from './services/reminderService';
 import { chatService } from './services/chatService';
-import { Clock, FileText, DollarSign, LayoutGrid, User, CalendarDays, Square, Trash2, Plus, CheckCircle2, Wallet, LogOut, ShieldAlert, MessageSquare, Mic, MicOff, Sparkles, Loader2, Briefcase, Tag, AlertCircle, X, Check, StopCircle, ChevronRight, Camera, Search, Download, Edit3, Filter } from 'lucide-react';
+import { Clock, FileText, DollarSign, LayoutGrid, User, CalendarDays, Calendar, Square, Trash2, Plus, CheckCircle2, Wallet, LogOut, ShieldAlert, MessageSquare, Mic, MicOff, Sparkles, Loader2, Briefcase, Tag, AlertCircle, X, Check, StopCircle, ChevronRight, Camera, Search, Download, Edit3, Filter } from 'lucide-react';
 import { getDirectImageUrl } from './photoUtils';
 
 export const getEntryDuration = (entry: TimeEntry, fallbackTimeMs: number) => {
@@ -480,10 +481,65 @@ const App: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [showAdmin, setShowAdmin] = useState(false);
     const [now, setNow] = useState(new Date());
-    const [currentTab, setCurrentTab] = useState<'tasks' | 'time' | 'profile' | 'paylog' | 'chat'>('time');
+    const [currentTab, setCurrentTab] = useState<'tasks' | 'time' | 'profile' | 'paylog' | 'chat' | 'calendar'>('time');
     const [unreadChatCount, setUnreadChatCount] = useState(0);
     const [newProjectName, setNewProjectName] = useState('');
     const [selectedProject, setSelectedProject] = useState<string>('General');
+
+    // Schedules persistent state
+    const [schedules, setSchedules] = useState<ScheduleEvent[]>(() => {
+        try {
+            const saved = localStorage.getItem('geotime_schedules');
+            return saved ? JSON.parse(saved) : [];
+        } catch {
+            return [];
+        }
+    });
+
+    useEffect(() => {
+        localStorage.setItem('geotime_schedules', JSON.stringify(schedules));
+    }, [schedules]);
+
+    const [allUsers, setAllUsers] = useState<Array<{ id: string; name: string; role?: string; hourlyWage?: number }>>([]);
+
+    const handleSaveSchedule = async (schedule: ScheduleEvent) => {
+        setSchedules(prev => {
+            const idx = prev.findIndex(s => s.id === schedule.id);
+            if (idx >= 0) {
+                const updated = [...prev];
+                updated[idx] = schedule;
+                return updated;
+            }
+            return [...prev, schedule];
+        });
+
+        try {
+            await fetch('/api/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    payload: { action: 'SAVE_SCHEDULE', payload: { schedule } }
+                })
+            });
+        } catch (err) {
+            console.error('Failed to save schedule to Google Apps Script:', err);
+        }
+    };
+
+    const handleDeleteSchedule = async (scheduleId: string) => {
+        setSchedules(prev => prev.filter(s => s.id !== scheduleId));
+        try {
+            await fetch('/api/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    payload: { action: 'DELETE_SCHEDULE', payload: { id: scheduleId } }
+                })
+            });
+        } catch (err) {
+            console.error('Failed to delete schedule from Google Apps Script:', err);
+        }
+    };
 
     // Subscribe to unread chat count
     useEffect(() => {
@@ -647,6 +703,12 @@ const App: React.FC = () => {
                     }
                     if (Array.isArray(data.data.payReports)) {
                         setPayReports(data.data.payReports);
+                    }
+                    if (Array.isArray(data.data.schedules)) {
+                        setSchedules(data.data.schedules);
+                    }
+                    if (Array.isArray(data.data.users)) {
+                        setAllUsers(data.data.users);
                     }
                 }
             })
@@ -2083,6 +2145,56 @@ const App: React.FC = () => {
                         </div>
                     </div>
                 )}
+
+                {currentTab === 'calendar' && (
+                    <div className="px-4 md:px-6 mt-6 flex flex-col gap-5 max-w-6xl mx-auto w-full">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center text-orange-600 shadow-xs">
+                                    <Calendar className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h2 className="text-lg font-bold text-gray-900 leading-tight">Team Schedule & Job Assignments</h2>
+                                    <p className="text-xs text-gray-500">Know where you're assigned, see scheduled jobs, and add new shifts</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    fetch('/api/sync', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            payload: { action: 'FETCH_SCHEDULES' }
+                                        })
+                                    })
+                                    .then(res => res.json())
+                                    .then(data => {
+                                        if (data?.success && Array.isArray(data.data?.schedules)) {
+                                            setSchedules(data.data.schedules);
+                                        }
+                                    })
+                                    .catch(console.error);
+                                }}
+                                className="inline-flex items-center justify-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold px-3 py-2 rounded-xl transition-colors cursor-pointer self-start sm:self-auto"
+                            >
+                                🔄 Refresh Calendar
+                            </button>
+                        </div>
+
+                        <ScheduleCalendar 
+                            schedules={schedules}
+                            projects={projects}
+                            users={allUsers.length > 0 ? allUsers : (profile ? [profile] : [])}
+                            currentUser={profile}
+                            onSaveSchedule={handleSaveSchedule}
+                            onDeleteSchedule={handleDeleteSchedule}
+                            onClockInToJob={(projectName) => {
+                                setSelectedProject(projectName);
+                                setCurrentTab('time');
+                            }}
+                        />
+                    </div>
+                )}
                     </div>
                 )}
 
@@ -2113,7 +2225,7 @@ const App: React.FC = () => {
                     <div className="flex justify-between items-center mb-6">
                         <div>
                             <h3 className="text-base font-bold text-slate-900 tracking-tight">Jobsite Menu & Actions</h3>
-                            <p className="text-xs text-slate-500 mt-0.5">Quick access to logs, tasks, and project sites</p>
+                            <p className="text-xs text-slate-500 mt-0.5">Quick access to logs, tasks, schedule, and project sites</p>
                         </div>
                         <button 
                             onClick={() => setIsSlideUpOpen(false)}
@@ -2124,11 +2236,12 @@ const App: React.FC = () => {
                     </div>
 
                     {/* Quick Section Tabs */}
-                    <div className="grid grid-cols-3 gap-3 mb-6">
+                    <div className="grid grid-cols-4 gap-2 mb-6">
                         {[
                             { id: 'tasks', name: 'Checklists', icon: LayoutGrid },
+                            { id: 'calendar', name: 'Schedule', icon: Calendar },
                             { id: 'paylog', name: 'Time Card', icon: Wallet },
-                            { id: 'profile', name: 'My Profile', icon: User }
+                            { id: 'profile', name: 'Profile', icon: User }
                         ].map((tabObj) => {
                             const TabIcon = tabObj.icon;
                             const isActive = currentTab === tabObj.id;
@@ -2139,14 +2252,14 @@ const App: React.FC = () => {
                                         setCurrentTab(tabObj.id as any);
                                         setIsSlideUpOpen(false);
                                     }}
-                                    className={`flex flex-col items-center justify-center py-3.5 px-3 rounded-xl border text-center transition-all cursor-pointer ${
+                                    className={`flex flex-col items-center justify-center py-3 px-2 rounded-xl border text-center transition-all cursor-pointer ${
                                         isActive 
                                             ? 'bg-blue-50/50 border-blue-200 text-blue-600 font-semibold shadow-sm' 
                                             : 'bg-slate-50/50 hover:bg-slate-50 border-slate-100 text-slate-600 font-medium'
                                     }`}
                                 >
-                                    <TabIcon className={`w-5 h-5 mb-1.5 ${isActive ? 'text-blue-600' : 'text-slate-500'}`} />
-                                    <span className="text-xs leading-none">{tabObj.name}</span>
+                                    <TabIcon className={`w-4 h-4 mb-1.5 ${isActive ? 'text-blue-600' : 'text-slate-500'}`} />
+                                    <span className="text-[11px] leading-none">{tabObj.name}</span>
                                 </button>
                             );
                         })}
