@@ -499,6 +499,11 @@ const App: React.FC = () => {
     const [allUsers, setAllUsers] = useState<Array<{ id: string; name: string; role?: string; hourlyWage?: number }>>([]);
 
     const handleSaveSchedule = async (schedule: ScheduleEvent) => {
+        // Automatically add new job to projects list if not already present
+        if (schedule.projectName && !projects.includes(schedule.projectName)) {
+            setProjects(prev => [...prev, schedule.projectName]);
+        }
+
         setSchedules(prev => {
             const idx = prev.findIndex(s => s.id === schedule.id);
             if (idx >= 0) {
@@ -2291,50 +2296,32 @@ const App: React.FC = () => {
                 )}
 
                 {currentTab === 'calendar' && (
-                    <div className="px-4 md:px-6 mt-6 flex flex-col gap-5 max-w-6xl mx-auto w-full">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center text-orange-600 shadow-xs">
-                                    <Calendar className="w-5 h-5" />
-                                </div>
-                                <div>
-                                    <h2 className="text-lg font-bold text-gray-900 leading-tight">Team Schedule & Job Assignments</h2>
-                                    <p className="text-xs text-gray-500">Know where you're assigned, see scheduled jobs, and add new shifts</p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => {
-                                    fetch('/api/sync', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({
-                                            payload: { action: 'FETCH_SCHEDULES' }
-                                        })
-                                    })
-                                    .then(res => res.json())
-                                    .then(data => {
-                                        if (data?.success && Array.isArray(data.data?.schedules)) {
-                                            setSchedules(data.data.schedules);
-                                        }
-                                    })
-                                    .catch(console.error);
-                                }}
-                                className="inline-flex items-center justify-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold px-3 py-2 rounded-xl transition-colors cursor-pointer self-start sm:self-auto"
-                            >
-                                🔄 Refresh Calendar
-                            </button>
-                        </div>
-
+                    <div className="px-3 sm:px-6 mt-4 flex flex-col gap-4 max-w-6xl mx-auto w-full">
                         <ScheduleCalendar 
                             schedules={schedules}
                             projects={projects}
-                            users={allUsers.length > 0 ? allUsers : (profile ? [profile] : [])}
                             currentUser={profile}
                             onSaveSchedule={handleSaveSchedule}
                             onDeleteSchedule={handleDeleteSchedule}
                             onClockInToJob={(projectName) => {
                                 setSelectedProject(projectName);
                                 setCurrentTab('time');
+                            }}
+                            onRefresh={() => {
+                                fetch('/api/sync', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        payload: { action: 'FETCH_SCHEDULES' }
+                                    })
+                                })
+                                .then(res => res.json())
+                                .then(data => {
+                                    if (data?.success && Array.isArray(data.data?.schedules)) {
+                                        setSchedules(data.data.schedules);
+                                    }
+                                })
+                                .catch(console.error);
                             }}
                         />
                     </div>

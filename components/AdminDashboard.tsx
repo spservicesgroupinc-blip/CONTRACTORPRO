@@ -2248,8 +2248,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                                     <ChevronLeft className="w-5 h-5" />
                                 </button>
                                 <div>
-                                    <h1 className="text-base font-bold text-slate-800 leading-none">Crew Scheduling & Calendar</h1>
-                                    <p className="text-xs text-slate-500 mt-0.5">Assign shifts, manage jobsite dates, and prevent crew conflicts</p>
+                                    <h1 className="text-base font-bold text-slate-800 leading-none">Company Scheduling & Job Calendar</h1>
+                                    <p className="text-xs text-slate-500 mt-0.5">Universal crew schedule • Synchronized and visible across all employee devices</p>
                                 </div>
                             </div>
                         </div>
@@ -2257,11 +2257,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, profile
                         <ScheduleCalendar 
                             schedules={adminData?.schedules || []}
                             projects={adminData?.projects || ['General']}
-                            users={adminData?.users || []}
                             currentUser={profile}
                             onSaveSchedule={handleSaveSchedule}
                             onDeleteSchedule={handleDeleteSchedule}
                             isLoading={isLoading}
+                            onRefresh={fetchAdminData}
                         />
                     </div>
                 )}

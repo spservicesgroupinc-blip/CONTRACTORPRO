@@ -562,8 +562,8 @@ function doPost(e) {
             endDate: r[4] ? String(r[4]) : undefined,
             startTime: r[5] ? String(r[5]) : undefined,
             endTime: r[6] ? String(r[6]) : undefined,
-            assignedTo: safeJsonParse(r[7], []),
-            assignedNames: safeJsonParse(r[8], []),
+            assignedTo: ["all"],
+            assignedNames: ["All Staff / Entire Crew"],
             location: r[9] ? String(r[9]) : undefined,
             notes: r[10] ? String(r[10]) : undefined,
             status: String(r[11] || "scheduled"),
@@ -700,8 +700,8 @@ function doPost(e) {
             endDate: r[4] ? String(r[4]) : undefined,
             startTime: r[5] ? String(r[5]) : undefined,
             endTime: r[6] ? String(r[6]) : undefined,
-            assignedTo: safeJsonParse(r[7], []),
-            assignedNames: safeJsonParse(r[8], []),
+            assignedTo: ["all"],
+            assignedNames: ["All Staff / Entire Crew"],
             location: r[9] ? String(r[9]) : undefined,
             notes: r[10] ? String(r[10]) : undefined,
             status: String(r[11] || "scheduled"),
@@ -792,7 +792,7 @@ function doPost(e) {
       return jsonResponse({ success: false, error: "Report not found" });
     }
 
-    // 10B. SCHEDULE & CALENDAR DISPATCH
+    // 10B. UNIVERSAL COMPANY SCHEDULE MANAGEMENT (Synced to Google Sheets for all staff)
     if (action === "FETCH_SCHEDULES") {
       const schedulesSheet = getSheet(ss, "Schedules");
       const sData = schedulesSheet ? schedulesSheet.getDataRange().getValues() : [];
@@ -809,8 +809,8 @@ function doPost(e) {
             endDate: r[4] ? String(r[4]) : undefined,
             startTime: r[5] ? String(r[5]) : undefined,
             endTime: r[6] ? String(r[6]) : undefined,
-            assignedTo: safeJsonParse(r[7], []),
-            assignedNames: safeJsonParse(r[8], []),
+            assignedTo: ["all"],
+            assignedNames: ["All Staff / Entire Crew"],
             location: r[9] ? String(r[9]) : undefined,
             notes: r[10] ? String(r[10]) : undefined,
             status: String(r[11] || "scheduled"),
@@ -830,6 +830,10 @@ function doPost(e) {
         return jsonResponse({ success: false, error: "Missing schedule event ID" });
       }
 
+      // Universal schedule applies to all employees
+      event.assignedTo = ["all"];
+      event.assignedNames = ["All Staff / Entire Crew"];
+
       const sData = schedulesSheet.getDataRange().getValues();
       let updated = false;
       const rowPayload = [
@@ -840,8 +844,8 @@ function doPost(e) {
         event.endDate || "",
         event.startTime || "",
         event.endTime || "",
-        JSON.stringify(event.assignedTo || []),
-        JSON.stringify(event.assignedNames || []),
+        JSON.stringify(["all"]),
+        JSON.stringify(["All Staff / Entire Crew"]),
         event.location || "",
         event.notes || "",
         event.status || "scheduled",
